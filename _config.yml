@@ -19,6 +19,7 @@ github_username: tomwei7
 markdown: kramdown
 theme: plainwhite
 remote_theme: thelehhman/plainwhite-jekyll
+seo: ''
 plugins:
   - jekyll-feed
 
