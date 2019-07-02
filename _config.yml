@@ -18,7 +18,7 @@ github_username: tomwei7
 # Build settings
 markdown: kramdown
 theme: plainwhite
-remote_theme: thelehhman/plainwhite-jekyll
+remote_theme: tomwei7/plainwhite-jekyll
 seo: ''
 plugins:
   - jekyll-feed
