@@ -20,11 +20,11 @@ show_excerpts: true
 markdown: redcarpet
 redcarpet:
   extensions: ["no_intra_emphasis", "fenced_code_blocks", "autolink", "tables", "with_toc_data"]
-theme: plainwhite
 remote_theme: tomwei7/plainwhite-jekyll
 seo: '42'
 plugins:
   - jekyll-feed
+  - jekyll-remote-theme
 
 # Exclude from processing.
 # The following items will not be processed, by default. Create a custom list
