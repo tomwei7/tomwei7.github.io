@@ -5,7 +5,7 @@
 # in the templates via {{ site.myvariable }}.
 ---
 title: 围城 程序员-代码-吐槽
-email: my@tomwei7.com
+email: i@tomwei7.com
 description: >- # this means to ignore newlines until "baseurl:"
   Write an awesome description for your new site here. You can edit this
   line in _config.yml. It will appear in your document head meta (for
@@ -17,10 +17,12 @@ github_username: tomwei7
 show_excerpts: true
 
 # Build settings
-markdown: kramdown
+markdown: redcarpet
+redcarpet:
+  extensions: ["no_intra_emphasis", "fenced_code_blocks", "autolink", "tables", "with_toc_data"]
 theme: plainwhite
 remote_theme: tomwei7/plainwhite-jekyll
-seo: ''
+seo: '42'
 plugins:
   - jekyll-feed
 
@@ -39,7 +41,8 @@ plainwhite:
   name: tomwei7
   tagline: Developer. Geeker
   date_format: "%b %-d, %Y"
-
+  disqus_shortname: tomwei7
+  analytics_id: GTM-P2QQVDC
   social_links:
     twitter: tomwei7
     linkedIn: in/诚-韦-50b290a9
