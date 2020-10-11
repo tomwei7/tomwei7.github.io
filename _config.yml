@@ -16,10 +16,6 @@ twitter_username: tomwei7
 github_username: tomwei7
 show_excerpts: true
 
-# Build settings
-markdown: redcarpet
-redcarpet:
-  extensions: ["no_intra_emphasis", "fenced_code_blocks", "autolink", "tables", "with_toc_data"]
 remote_theme: tomwei7/plainwhite-jekyll
 seo: '42'
 plugins:
