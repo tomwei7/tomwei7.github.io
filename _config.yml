@@ -5,7 +5,7 @@
 # in the templates via {{ site.myvariable }}.
 ---
 title: 围城 程序员-代码-吐槽
-email: i@tomwei7.com
+email: tomwei7g@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   Write an awesome description for your new site here. You can edit this
   line in _config.yml. It will appear in your document head meta (for
@@ -38,7 +38,7 @@ plainwhite:
   tagline: Developer. Geeker
   date_format: "%b %-d, %Y"
   disqus_shortname: tomwei7
-  analytics_id: UA-72226462-1
+  analytics_id: GTM-P2QQVDC
   social_links:
     twitter: tomwei7
     linkedIn: in/诚-韦-50b290a9
