@@ -2,7 +2,7 @@
 title: QEMU 网络配置
 layout: post
 date: 2021-10-09 01:05:19 +08:00
-categories: qemu,network
+tags: qemu,network
 ---
 
 QEMU 是一款开源的通用模拟器被用于各式各样的虚拟化场景。QEMU 不同于我们常用的 [VirtualBox](https://www.virtualbox.org/) 或者 [VMware](https://www.vmware.com/) 之类的软件，QEMU 并没有提供图形化的配置工具，一般都是使用命令行进行使用。其中最复杂的要属网络的配置，要理解 QEMU 的网络配置实现要了解它网络的组成，QEMU 的网络由两个部分组成:
@@ -49,7 +49,7 @@ User Networking 使用 SLIRP 实现，SLIRP 实现了完整的 TCP/IP 栈并以�
 
 当不带任何网络参数启动虚拟机时，默认的网络拓扑如上图
 
-![/images/qemu-network/Qemu-Network-01.drawio.png](QEMU-Network%20f05d7717978c4534969cd2f486efc7d3/Qemu-Network-01.drawio.png)
+![/images/qemu-network/Qemu-Network-01.drawio.png](/images/qemu-network/Qemu-Network-01.drawio.png)
 
 User Networking 可以添加参数其他参数实现类似端口转发，通过 SMB 共享主机文件夹等
 
@@ -70,7 +70,7 @@ ip link add name br0 type bridge
 
 使用 TAP Network 配合 Bridge 实现的 NAT 网络拓扑如下，这种网络模式是我个人比较喜欢的方式，在该网络中，虚拟机拥有自己的 IP 宿主机可以直接访问虚拟机，虚拟机也能够直接访问宿主机。虚拟机访问外网时宿主机充当网关，实现 NAT 功能。物理网络中其他主机无法直接访问该虚拟机，不过可以在宿主机上使用 iptables 配置端口转发实现暴露虚拟机到物理网络。
 
-![/images/qemu-network/Qemu-Network-02.drawio.png](QEMU-Network%20f05d7717978c4534969cd2f486efc7d3/Qemu-Network-02.drawio.png)
+![/images/qemu-network/Qemu-Network-02.drawio.png](/images/qemu-network/Qemu-Network-02.drawio.png)
 
 在这之前需要做些准备工作，首先我们为之前创建的 bridge 配置 IP 地址，并启动 bridge。然后需要配置 Linux ip forwarding 以及 NAT 功能
 
@@ -101,11 +101,11 @@ ip route add default via 192.168.100.1 dev ens3
 
 测速网站测试下网络联通性
 
-![/images/qemu-network/Untitled](QEMU-Network%20f05d7717978c4534969cd2f486efc7d3/Untitled.png)
+![/images/qemu-network/Untitled](/images/qemu-network/Untitled.png)
 
 使用 TAP 配合 Bridge 也可以实现桥接物理，网络的拓扑如下，这个网络模式下，虚拟机作为和宿主机对等的关系接入物理网络。虚拟机，宿主机与网络中的其他主机均可相互访问。
 
-![/images/qemu-network/Qemu-Network-03.drawio.png](QEMU-Network%20f05d7717978c4534969cd2f486efc7d3/Qemu-Network-03.drawio.png)
+![/images/qemu-network/Qemu-Network-03.drawio.png](/images/qemu-network/Qemu-Network-03.drawio.png)
 
 这个模式与上面的 NAT 模式比较类似，不过不需要对宿主机进行特别的配置，只需要将物理机网卡加入 br0 中即可，这个时候 br0 相当于一个交换机，宿主机和虚拟机都连在这个交换机上。使用 `ip link set eth0 master bridge_name` 可以将物理网卡加入 bridge 中。
 
