@@ -1,0 +1,1097 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>围城</title><link>http://example.org/</link><description>Recent content on 围城</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Sat, 09 Oct 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://example.org/index.xml" rel="self" type="application/rss+xml"/><item><title>QEMU 网络配置</title><link>http://example.org/2021/10/09/qemu-network-config.html</link><pubDate>Sat, 09 Oct 2021 00:00:00 +0000</pubDate><guid>http://example.org/2021/10/09/qemu-network-config.html</guid><description>&lt;img src="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-01.drawio.png" alt="Featured image of post QEMU 网络配置" />&lt;p>QEMU 是一款开源的通用模拟器被用于各式各样的虚拟化场景。QEMU 不同于我们常用的 &lt;a class="link" href="https://www.virtualbox.org/" target="_blank" rel="noopener"
+>VirtualBox&lt;/a> 或者 &lt;a class="link" href="https://www.vmware.com/" target="_blank" rel="noopener"
+>VMware&lt;/a> 之类的软件，QEMU 并没有提供图形化的配置工具，一般都是使用命令行进行使用。其中最复杂的要属网络的配置，要理解 QEMU 的网络配置实现要了解它网络的组成，QEMU 的网络由两个部分组成:&lt;/p>
+&lt;ul>
+&lt;li>提供给虚拟机的虚拟网卡（virtual network device）比如经典的 e1000,rtl8139 以及 virtio-net-pci 等，是虚拟机内部看到的设备&lt;/li>
+&lt;li>与虚拟网卡交互的后端（network backend）虚拟机往虚拟网卡写入的数据都会由 network backend 流出到真实的网络环境中&lt;/li>
+&lt;/ul>
+&lt;p>网络配置参数:&lt;/p>
+&lt;p>QEMU 网络配置需要组合使用 &lt;code>-netdev TYPE,id=NAME,...&lt;/code> 与 &lt;code>-device device TYPE,netdev=NAME&lt;/code> 命令，&lt;code>-device&lt;/code> 用于配置虚拟网卡，&lt;code>-netdev&lt;/code> 用于配置网络后端，&lt;code>netdev&lt;/code> 中的 &lt;code>id&lt;/code> 与 &lt;code>device&lt;/code> 中的 &lt;code>netdev&lt;/code> 参数配合用于组成一组网络配置，一台虚拟机可以配置多个网络&lt;/p>
+&lt;p>比如最简单的使用 User Networking 的配置&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">-netdev user,id&lt;span style="color:#f92672">=&lt;/span>mynic0 -device e1000,netdev&lt;span style="color:#f92672">=&lt;/span>mynic0,mac&lt;span style="color:#f92672">=&lt;/span>52:54:98:76:54:32
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>如果不关心网卡的详细配置也可以使用 &lt;code>-nic&lt;/code> 简化命令&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">-nic user,model&lt;span style="color:#f92672">=&lt;/span>e1000,mac&lt;span style="color:#f92672">=&lt;/span>52:54:98:76:54:32
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>-nic&lt;/code> 参数中 model 对应 device 中的 type，使用 nic 可以避免分别配置 netdev 与 device 但是相对的只提供了非常少的可选参数&lt;/p>
+&lt;blockquote>
+&lt;p>QEMU 不会为网卡生成随机的 mac 地址，如果不指定 mac 地址则启动的虚拟机都有相同的 mac 如果需要启动多个虚拟机在除 User Networking 的网络比如 tap 的桥接网络中都会存在 mac 地址冲突问题。&lt;/p>
+&lt;/blockquote>
+&lt;h3 id="network-backend">Network Backend&lt;/h3>
+&lt;hr>
+&lt;p>常用的 Network Backend 主要有两种 user networking(slirp) 和 &lt;a class="link" href="https://en.wikipedia.org/wiki/Network_tap#:~:text=A%20network%20tap%20is%20a,two%20points%20in%20the%20network." target="_blank" rel="noopener"
+>tap&lt;/a> ，大多数情况下如果你只是希望你的虚拟机能够访问网络那么 user networking(slirp) 就够用了，user networking(slirp) 也是 QEMU 的默认项。但是如果希望组建比较复杂的网络拓扑或者希望虚拟机宿主机之间能够自由的相互访问这个时候 &lt;a class="link" href="https://en.wikipedia.org/wiki/Network_tap#:~:text=A%20network%20tap%20is%20a,two%20points%20in%20the%20network." target="_blank" rel="noopener"
+>tap&lt;/a> 就很适合。&lt;/p>
+&lt;h3 id="user-networking-slirp">User Networking (SLIRP)&lt;/h3>
+&lt;p>这是 QEMU 的默认 Network Backend，使用时不需要管理员（root）权限，但是存在这以下限制&lt;/p>
+&lt;ul>
+&lt;li>由于额外开销比较大，所以性能比较差&lt;/li>
+&lt;li>不特殊配置无法传输 ICMP 流量比如不能使用 ping 等&lt;/li>
+&lt;li>虚拟机默认没办法直接从宿主机或者外部网络访问&lt;/li>
+&lt;/ul>
+&lt;p>User Networking 使用 SLIRP 实现，SLIRP 实现了完整的 TCP/IP 栈并以此实现了虚拟的 NAT 转发，供虚拟机访问网络&lt;/p>
+&lt;p>当不带任何网络参数启动虚拟机时，默认的网络拓扑如上图&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 104;
+flex-basis: 251px"
+>
+&lt;a href="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-01.drawio.png" data-size="910x870">
+&lt;img src="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-01.drawio.png"
+width="910"
+height="870"
+srcset="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-01.drawio_hu5f1ffb008674850e04787285e79164d9_77119_480x0_resize_box_2.png 480w, http://example.org/2021/10/09/qemu-network-config/Qemu-Network-01.drawio_hu5f1ffb008674850e04787285e79164d9_77119_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Qemu-Network-01.drawio.png">
+&lt;/a>
+&lt;figcaption>Qemu-Network-01.drawio.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>User Networking 可以添加参数其他参数实现类似端口转发，通过 SMB 共享主机文件夹等&lt;/p>
+&lt;ul>
+&lt;li>端口转发 &lt;code>-netdev user,id=n0,hostfwd=hostip:hostport-guestip:guestport&lt;/code>&lt;/li>
+&lt;li>SMB目录共享 &lt;code>-netdev user,id=n0,smb=dir,smbserver=addr&lt;/code>&lt;/li>
+&lt;/ul>
+&lt;h3 id="tap-network">TAP Network&lt;/h3>
+&lt;p>&lt;a class="link" href="https://zh.wikipedia.org/wiki/TUN%E4%B8%8ETAP" target="_blank" rel="noopener"
+>TUN/TAP设备&lt;/a>是一种 Linux 上的虚拟网络设备，通过此设备，程序可以方便的模拟网络行为，其中 TAP 模拟的是个二层设备可以通过 TAP 设备收发 MAC 层数据包，即数据链路层，拥有 MAC 层功能，可以与物理网络做 Bridge。TUN 则是个三层设备可以用于收发 IP 层数据包，这里不做过多讨论。TAP Network 就是使用宿主机 TAP 设备作为 Network Backend 的一种网络模式，一般会和 Bridge 配合使用提供了很好的网络性能，而且拥有极大的灵活性，可以实现各种各样的网络拓扑。不过这种网络一般需要root权限才能使用。&lt;/p>
+&lt;p>TAP Network 一般需要配置 Bridge 使用，这里主要介绍两种网络模式，NAT 和 桥接物理网络。&lt;/p>
+&lt;p>首先需要创建一个 bridge 可以使用 IP 命令添加一个 bridge&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">ip link add name br0 type bridge
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>使用 TAP Network 配合 Bridge 实现的 NAT 网络拓扑如下，这种网络模式是我个人比较喜欢的方式，在该网络中，虚拟机拥有自己的 IP 宿主机可以直接访问虚拟机，虚拟机也能够直接访问宿主机。虚拟机访问外网时宿主机充当网关，实现 NAT 功能。物理网络中其他主机无法直接访问该虚拟机，不过可以在宿主机上使用 iptables 配置端口转发实现暴露虚拟机到物理网络。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 73;
+flex-basis: 176px"
+>
+&lt;a href="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-02.drawio.png" data-size="830x1130">
+&lt;img src="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-02.drawio.png"
+width="830"
+height="1130"
+srcset="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-02.drawio_hucb6fb8820e0a603c23dcfb063c92e7b8_95280_480x0_resize_box_2.png 480w, http://example.org/2021/10/09/qemu-network-config/Qemu-Network-02.drawio_hucb6fb8820e0a603c23dcfb063c92e7b8_95280_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Qemu-Network-02.drawio.png">
+&lt;/a>
+&lt;figcaption>Qemu-Network-02.drawio.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>在这之前需要做些准备工作，首先我们为之前创建的 bridge 配置 IP 地址，并启动 bridge。然后需要配置 Linux ip forwarding 以及 NAT 功能&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">ip addr add 192.168.100.1/24 brd + dev br0
+ip link set br0 up
+&lt;span style="color:#75715e"># 开启 ip_forward&lt;/span>
+sysctl -w net.ipv4.ip_forward&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>
+&lt;span style="color:#75715e"># 允许对从 br0 流入的数据包进行 FORWARD&lt;/span>
+iptables -t filter -A FORWARD -i br0 -j ACCEPT
+iptables -t filter -A FORWARD -o br0 -j ACCEPT
+&lt;span style="color:#75715e"># 也可以直接将 filter FORWARD 策略直接设置为 ACCEPT&lt;/span>
+&lt;span style="color:#75715e"># iptables -t filter -P FORWARD ACCEPT&lt;/span>
+&lt;span style="color:#75715e"># 开启 NAT&lt;/span>
+iptables -t nat -A POSTROUTING -o enp4s0 -j MASQUERADE
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>现在我们就可以使用 br0 实现 NAT 网络了，这里我们启动一个简单的 archlinux 的 live cd 作为测试&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">&lt;span style="color:#75715e"># 启动虚拟机&lt;/span>
+qemu-system-x86_64 -enable-kvm -m &lt;span style="color:#ae81ff">2048&lt;/span> -boot order&lt;span style="color:#f92672">=&lt;/span>d -cdrom archlinux-2021.10.01-x86_64.iso -nic bridge,br&lt;span style="color:#f92672">=&lt;/span>br0,model&lt;span style="color:#f92672">=&lt;/span>virtio-net-pci,mac&lt;span style="color:#f92672">=&lt;/span>02:76:7d:d7:1e:3f
+&lt;span style="color:#75715e"># 进入虚拟机后配置网卡&lt;/span>
+ip addr add 192.168.100.2/24 brd + dev ens3
+ip route add default via 192.168.100.1 dev ens3
+&lt;span style="color:#75715e"># 按需修改 /etc/resolv.conf 配置 DNS 服务器&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>测速网站测试下网络联通性&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 397;
+flex-basis: 952px"
+>
+&lt;a href="http://example.org/2021/10/09/qemu-network-config/Untitled.png" data-size="1326x334">
+&lt;img src="http://example.org/2021/10/09/qemu-network-config/Untitled.png"
+width="1326"
+height="334"
+srcset="http://example.org/2021/10/09/qemu-network-config/Untitled_hu11622806cd58ac5180d205c28c435094_140081_480x0_resize_box_2.png 480w, http://example.org/2021/10/09/qemu-network-config/Untitled_hu11622806cd58ac5180d205c28c435094_140081_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled">
+&lt;/a>
+&lt;figcaption>Untitled&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>使用 TAP 配合 Bridge 也可以实现桥接物理，网络的拓扑如下，这个网络模式下，虚拟机作为和宿主机对等的关系接入物理网络。虚拟机，宿主机与网络中的其他主机均可相互访问。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 82;
+flex-basis: 197px"
+>
+&lt;a href="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-03.drawio.png" data-size="830x1010">
+&lt;img src="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-03.drawio.png"
+width="830"
+height="1010"
+srcset="http://example.org/2021/10/09/qemu-network-config/Qemu-Network-03.drawio_hu663cf0c4a9f5f83d1744a3c26097f879_89942_480x0_resize_box_2.png 480w, http://example.org/2021/10/09/qemu-network-config/Qemu-Network-03.drawio_hu663cf0c4a9f5f83d1744a3c26097f879_89942_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Qemu-Network-03.drawio.png">
+&lt;/a>
+&lt;figcaption>Qemu-Network-03.drawio.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>这个模式与上面的 NAT 模式比较类似，不过不需要对宿主机进行特别的配置，只需要将物理机网卡加入 br0 中即可，这个时候 br0 相当于一个交换机，宿主机和虚拟机都连在这个交换机上。使用 &lt;code>ip link set eth0 master bridge_name&lt;/code> 可以将物理网卡加入 bridge 中。&lt;/p>
+&lt;h3 id="virtual-network-device">Virtual Network Device&lt;/h3>
+&lt;hr>
+&lt;p>虚拟网络设备，对于的就是虚拟机内实际看到的网卡设备，一般根据虚拟机操作系统的类型选择或者你希望模拟的设备选择。如果你希望模拟一个嵌入式设备带有一个板载网卡，那么你可以选择一个板载网卡网卡的设备，可以使用 &lt;code>-device help&lt;/code> 列出所有支持的设备类型。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">Network devices:
+name &lt;span style="color:#e6db74">&amp;#34;e1000&amp;#34;&lt;/span>, bus PCI, alias &lt;span style="color:#e6db74">&amp;#34;e1000-82540em&amp;#34;&lt;/span>, desc &lt;span style="color:#e6db74">&amp;#34;Intel Gigabit Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;e1000-82544gc&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel Gigabit Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;e1000-82545em&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel Gigabit Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;e1000e&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel 82574L GbE Controller&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82550&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82550 Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82551&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82551 Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82557a&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82557A Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82557b&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82557B Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82557c&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82557C Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82558a&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82558A Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82558b&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82558B Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82559a&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82559A Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82559b&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82559B Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82559c&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82559C Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82559er&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82559ER Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82562&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82562 Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;i82801&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Intel i82801 Ethernet&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;ne2k_isa&amp;#34;&lt;/span>, bus ISA
+name &lt;span style="color:#e6db74">&amp;#34;ne2k_pci&amp;#34;&lt;/span>, bus PCI
+name &lt;span style="color:#e6db74">&amp;#34;pcnet&amp;#34;&lt;/span>, bus PCI
+name &lt;span style="color:#e6db74">&amp;#34;rocker&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;Rocker Switch&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;rtl8139&amp;#34;&lt;/span>, bus PCI
+name &lt;span style="color:#e6db74">&amp;#34;tulip&amp;#34;&lt;/span>, bus PCI
+name &lt;span style="color:#e6db74">&amp;#34;usb-net&amp;#34;&lt;/span>, bus usb-bus
+name &lt;span style="color:#e6db74">&amp;#34;virtio-net-device&amp;#34;&lt;/span>, bus virtio-bus
+name &lt;span style="color:#e6db74">&amp;#34;virtio-net-pci&amp;#34;&lt;/span>, bus PCI, alias &lt;span style="color:#e6db74">&amp;#34;virtio-net&amp;#34;&lt;/span>
+name &lt;span style="color:#e6db74">&amp;#34;virtio-net-pci-non-transitional&amp;#34;&lt;/span>, bus PCI
+name &lt;span style="color:#e6db74">&amp;#34;virtio-net-pci-transitional&amp;#34;&lt;/span>, bus PCI
+name &lt;span style="color:#e6db74">&amp;#34;vmxnet3&amp;#34;&lt;/span>, bus PCI, desc &lt;span style="color:#e6db74">&amp;#34;VMWare Paravirtualized Ethernet v3&amp;#34;&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>对于 Linux 虚拟机没有特殊要求，我们可以使用半虚拟化的设备 &lt;code>virtio&lt;/code> 来获得最好的性能。&lt;/p></description></item><item><title>Intel Optane (傲腾) 工作原理</title><link>http://example.org/2021/01/27/how-intel-optane-work.html</link><pubDate>Wed, 27 Jan 2021 00:00:00 +0000</pubDate><guid>http://example.org/2021/01/27/how-intel-optane-work.html</guid><description>&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/0.png" alt="Featured image of post Intel Optane (傲腾) 工作原理" />&lt;p>最近（2021年一月份）因特尔宣布停产消费级傲腾产品。在老玩家眼里傲腾一直是最强 SSD 的存在，傲腾的 4K 性能可以说是一骑绝尘，但是傲腾的价格在 SSD 中也是一骑绝尘。所以因特尔砍掉消费级傲腾产品也并不意外。目前网上关于傲腾的讨论，也大多集中于 4K 性能如何如何强，3D XPoint 寿命长，没有写放大问题等等主要还是和现有 NAND flash 的 SSD 相比较，大多媒体也只是抛出了一大堆专用名词，但是从来没有解释过傲腾的 3D XPoint 是具体如何工作的。我在网上发现了一片文章较为完整的解释了傲腾以及 3D XPoint 的工作原理。&lt;/p>
+&lt;p>&lt;a class="link" href="https://pcper.com/2017/06/how-3d-xpoint-phase-change-memory-works/" target="_blank" rel="noopener"
+>How 3D XPoint Phase-Change Memory Works - PC Perspective&lt;/a>&lt;/p>
+&lt;p>我文中的内容也基本来自于这篇文章，为了避免生硬的翻译，我这里会掺杂很多自己的语言解释，感兴趣的可以去看原文。&lt;/p>
+&lt;p>Optane 的工作原理与 NAND Flash 有很大区别，NAND Flash 是基于 &lt;a class="link" href="https://en.wikipedia.org/wiki/Floating-gate_MOSFET" target="_blank" rel="noopener"
+>Floating-gate MOSFET&lt;/a> 而 Optane 虽然因特尔没有官方资料说明但是根据国外机构用&lt;a class="link" href="https://en.wikipedia.org/wiki/Mass_spectrometry" target="_blank" rel="noopener"
+>质谱法&lt;/a> 测试的结果表明 Optane 是一种基于 &lt;a class="link" href="https://en.wikipedia.org/wiki/Phase-change_memory" target="_blank" rel="noopener"
+>PCM&lt;/a> (相变化存储器) 原理的存储器，PCM 简单来说就是某种物质目前主要是一种或多种硫族化物的玻璃，经由加热可以改变它的状态，成为晶体或者非晶体，这些不同的状态具有相应的电阻值。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 127;
+flex-basis: 307px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/0.png" data-size="846x661">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/0.png"
+width="846"
+height="661"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/0_hu6e124814faea8838e5a1c28a0f96c030_298795_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/0_hu6e124814faea8838e5a1c28a0f96c030_298795_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled.png">
+&lt;/a>
+&lt;figcaption>Untitled.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>这是一张因特尔 3D XPoint memory 的宣传图，注意其中存储 Memory Cell 和 Selector 结构，后面会提到&lt;/p>
+&lt;p>虽然因特尔并没有承认傲腾是基于 PCM 技术开发的，但是英特尔和美光合作研发基于 PCM 的存储器已经有很多年了，而且傲腾的种种特性也指向了它是基于 PCM 开发的事实。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 182;
+flex-basis: 438px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/1.png" data-size="1423x778">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/1.png"
+width="1423"
+height="778"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/1_hua5c32e4d0fc81479db18dd309554fc9b_155324_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/1_hua5c32e4d0fc81479db18dd309554fc9b_155324_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%201.png">
+&lt;/a>
+&lt;figcaption>Untitled%201.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>这是一张裸片(die)级别的 DRAM/PCM/NAND Flash 对比图（资料来源于这篇论文&lt;a class="link" href="https://pcper.com/wp-content/uploads/2017/06/f1db-pcm-db-algo-cidr11.pdf" target="_blank" rel="noopener"
+>link&lt;/a>）&lt;/p>
+&lt;p>这篇论文来自于 2011 年现可能稍微有点过时，但是它给了我们裸片级别的量化的性能对比，可能看到 XPoint 相较于 NAND Flash 有近 1000 倍速度和 1000 倍的耐用性。当然裸片的性能并不能直接反映到实际的 SSD 上，因为有控制器的开销以及其他的种种因素。比如英特尔第一代使用傲腾技术的 SSD DC P4800X 实际性能如下：&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 125;
+flex-basis: 301px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/2.png" data-size="1205x960">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/2.png"
+width="1205"
+height="960"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/2_hu205ff512b2d4737dc640ba5d79e4342e_311843_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/2_hu205ff512b2d4737dc640ba5d79e4342e_311843_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%202.png">
+&lt;/a>
+&lt;figcaption>Untitled%202.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>P4800X 的延迟大约在 10us 左右，是 NVMe SSD 的十倍&lt;/p>
+&lt;p>对比裸片的性能，有些人可能觉得实际性能表现不够好，但是这毕竟是第一代产品。我们现在常用的闪存也是经历了好几十年的发展的。&lt;/p>
+&lt;p>下面解释详细的技术细节&lt;/p>
+&lt;h3 id="相变化存储器pcm-是如何工作的">相变化存储器(PCM) 是如何工作的&lt;/h3>
+&lt;p>想要了解 XPoint 结构是如何读取和写入数据的，首先要了解相变化物质是如何工作的以及什么这些物质为什么具有这些特性&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 165;
+flex-basis: 398px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/3.png" data-size="594x358">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/3.png"
+width="594"
+height="358"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/3_hu65c3a4b41f08d092883748009ac55c60_47581_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/3_hu65c3a4b41f08d092883748009ac55c60_47581_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%203.png">
+&lt;/a>
+&lt;figcaption>Untitled%203.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>黄色的是类金属/蓝色框中的是氧族元素&lt;/p>
+&lt;p>相变材料一般是类金属的合金，类金属的外观多半类似金属，但只是弱的电导体。大部分类金属的物理特性及化学特性都介于金属和非金属之间。在室温下处于绝缘体状态经过加热或掺杂就变为导体。数年来人类已经对大量的类金属进行过实验。硼（B）主要用于掺杂，钋（P） 众所周知因为有放射性而且不稳定所以很少见到:). 硅（Si） 是很好的用于制作晶体管和其他半导体元件的材料但是不是很好的相变材料。剩下锗（Ge），砷（As），锑（Sb）和碲（Te）。它们的合金会生产&lt;a class="link" href="https://en.wikipedia.org/wiki/Chalcogenide" target="_blank" rel="noopener"
+>硫族化物&lt;/a>，在本文中指的是一种含有碲（Te）负离子的化合物（碲（Te）是氧族元素中唯一稳定的类金属）。当把这些元素进行适当的混合就能或得一些独特的属性:&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 123;
+flex-basis: 296px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/4.png" data-size="451x365">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/4.png"
+width="451"
+height="365"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/4_hu3b0f4cf1d1c6b85992a51ef271f37656_26330_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/4_hu3b0f4cf1d1c6b85992a51ef271f37656_26330_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%204.png">
+&lt;/a>
+&lt;figcaption>Untitled%204.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>尤其是，类金属合金拥有多种稳定状态每一种稳定状态都有不同的电阻值。通过加热和冷却可以实现从不同状态之间的转变。非晶态属性类似于玻璃而结晶态类似于金属。&lt;/p>
+&lt;h3 id="相变化存储器pcm-的读写">相变化存储器(PCM) 的读写&lt;/h3>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 249;
+flex-basis: 597px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/5.png" data-size="994x399">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/5.png"
+width="994"
+height="399"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/5_hu4bcf66b940e090e9ba5d0d2a19b2f7b9_91773_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/5_hu4bcf66b940e090e9ba5d0d2a19b2f7b9_91773_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%205.png">
+&lt;/a>
+&lt;figcaption>Untitled%205.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>当向相变材料上施加电压时，如果材料处于非晶体（Amorphous）的状态，在电压没有到达一个阈值前，会处于截止状态不会有电流通过，只有当电压超过一个阈值才会运行电流通过，一旦电流导通，随着电压的增加电流也会逐步增加。由于材料现在处于导电状态实际相当于一个电阻，因此会发热导致温度上升。当一直保持在 set(1) 的电压时，材料最终会达到约 350摄氏度的温度，虽然这个温度不足以导致融化，但是如果将温度维持约 100ns 则可以使分子重新排列成晶体（crystalline）结构。由于晶体（crystalline）结构也是稳定状态所以一旦形成即使去除电压后温度下降后也会得到保留。处于晶体（crystalline）状态的相变材料性质类似于普通电阻不存在非晶体（Amorphous）状态的电压阈值，当施加 0.5V 左右电压时就有约 0.5mA 的电流通过。&lt;/p>
+&lt;p>当要重置 reset(0) 到非晶体（Amorphous）状态时，只需要施加一个更大的电压，把温度提高到约 600摄氏度将材料加热到熔融状态。这会融化晶体（crystalline）结构。然后立刻移除电压让温度迅速下降，由于穿过晶体（crystalline）状态的温度区间速度过快所以无法形成任何晶体（crystalline）结构，重新冻结到非晶体（Amorphous）状态，重置完成。这时候如何施加 0.5V 左右的电压则不会有任何电流经过。其实我们不需要很高的电压去读取状态，大约在 0.1V 左右就能很明显的区分出状态。&lt;/p>
+&lt;p>可以注意到 PCM 不需要像 NAND Flash 一样在进行写入之前需要进行 erase 操作。可以直接通过施加不同的电压进行 set(1) 和 reset(0) 操作，完全不需要顾及之前的状态。NAND Flash 在写入前一般需要进行 KB 级别的 page 的 erase 操作有时候甚至是 MB 级别的 block 的 erase 操作，PCM 可以就地（in-place）写入以及单 bit 的覆盖。&lt;/p>
+&lt;h3 id="相变材料成分">相变材料成分&lt;/h3>
+&lt;p>英特尔和美光不愿意公布自己家 XPoint 的详细技术，希望你相信组成 XPoint 的东西是某种非常神秘的东西，但是其实不是。常见的相变化合金是锗，锑和碲的混合物化学计量比为2:2:5 Ge2Sb2Te5，简称为“ GST”。跟大多是合金一样，配方实际可能有很多细微的变化，这是各个厂商的商业机密。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 253;
+flex-basis: 609px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/6.png" data-size="1059x417">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/6.png"
+width="1059"
+height="417"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/6_hu93ec5664249e6901431e77ba42550ec2_146843_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/6_hu93ec5664249e6901431e77ba42550ec2_146843_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%206.png">
+&lt;/a>
+&lt;figcaption>Untitled%206.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>PCM 的开发人员会通过对混合物比例的微调来提供材料的性能，比如从上面的图可以看到稍微提高锑（Sb）的浓度如何有助于降低复位电阻（降低所需的电压）以及减少设置操作所需的时间。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 280;
+flex-basis: 673px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/7.png" data-size="1168x416">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/7.png"
+width="1168"
+height="416"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/7_hua8fbad5389e6e4a314d0285590ac7e4b_314922_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/7_hua8fbad5389e6e4a314d0285590ac7e4b_314922_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%207.png">
+&lt;/a>
+&lt;figcaption>Untitled%207.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>也许你会以为相变材料是某种最近才出现的高科技材料，其实我们早早就用过了。可以刻录的光盘就合 XPoint 的材料非常接近，光盘使用银和铟代替了GST中的锗改变来合金的性能。空的光盘是晶体状体，通过对写入激光进行脉冲加热，这些斑点迅速冷却而没有机会重结晶，形成了较暗的区域，结晶状态和非晶体状态的反射率不同，通过反射率的不同来读取信息。擦除光盘的时候使用较低功率的激光，让光盘在合适的温度下重新形成结晶。&lt;/p>
+&lt;h3 id="selectors">Selectors&lt;/h3>
+&lt;p>我们拥有了可用的制作相变化存储器的材料之后，就需要将它做的尽可能的小并且尽可能的紧凑的排列起来。存储器寻址的方式一般是通过 Bit/Word lines 即行(rows)列(columns)的方式，简单来说控制电路通过选择指定的行列来选择存储单元，通过测量电流或电压的方式取回存储的数据。对于 NAND Flash 而言，每个存储单元实际上是电路的一部分。并且当前单元的电荷量控制了晶体管的导电率。&lt;/p>
+&lt;p>当切换到纯电阻类型的存储器时，为了获取尽可能高的存储密度。一般将行列线直接交错，然后存储单元连接行列线的交叉点。这种方式就叫做 crossbar ，XPoint 用的就是这一种技术，可以从最开始的因特尔的宣传图片上看出来：&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 240;
+flex-basis: 576px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/8.png" data-size="1119x466">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/8.png"
+width="1119"
+height="466"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/8_hufcc5cd64f32b03794142fc08cac13f50_133048_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/8_hufcc5cd64f32b03794142fc08cac13f50_133048_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%208.png">
+&lt;/a>
+&lt;figcaption>Untitled%208.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>这种连接方式有一个很明显的问题，就是并联电阻的问题。当向指定的存储单元的 Bit/Word Line 施加电压时，比如上面的右图所示，我们只希望向 Rj 施加一个电压，希望电流只流过 Rj，但是实际可能存在多个平行的路径，比如蓝线所示的路径。这种平行的路径一般会有比较高的电阻值，因为必须通过多个串联的存储单元，但是当这种平行路径数量过多时会导致测量错误，而无法读取数据。&lt;/p>
+&lt;p>这个时候我们就需要通过 Selector，Selector 通过仅仅开启我们希望电流通过的路径的方式来避免并联电阻导致的问题。一般是晶体管，二极管或者其他开关元件。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 164;
+flex-basis: 393px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/9.png" data-size="812x495">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/9.png"
+width="812"
+height="495"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/9_huc534af96ee624e667afd59e893af7f84_64079_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/9_huc534af96ee624e667afd59e893af7f84_64079_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%209.png">
+&lt;/a>
+&lt;figcaption>Untitled%209.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>可能用于相变化存储器的 Selector 有这些类型，需要注意的是 Cell Size&lt;/p>
+&lt;p>大多数晶体管的方法的大小都过大了，抵消了 crossbar 这种方式带来的单位密度提升，由于需要做到比 NAND Flash 更高的密度，所以每一个存储单元一个晶体管的方案是不可行的。二极管也可以使用它更加的小巧，但是仍然是一个过于复杂的方案。还有一种简单的方式可以完全避免使用晶体管或者二极管甚至直接复用用来存储数据的相变材料，只用我们能能找这种材料。比如一种元件可以仅仅在施加了足够的电压时才降低电阻值，这样意味着只有被选点的存储单元才有电流流过，而其他并联路径因为存在多个单元串联的情况，电压没有达到阈值所以没有电流流过。&lt;/p>
+&lt;p>这个性质和处于非晶体状态当相变材料本身的性质很相似，不过还需要添加不同的材料才能让它作为可靠的开关使用。简单来说希望 Selector 元件能够拥有一致属性，我们不希望它像相变材料一样发生状态永久当转变非晶体→晶体。一般通过材料一般通过向材料中添加防止结晶当其他元素（例如砷）来实现。这样我们就或得了一种仅在电压超过阈值时才会导电当材料。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 143;
+flex-basis: 344px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/10.png" data-size="539x376">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/10.png"
+width="539"
+height="376"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/10_hu8aeb8fb2cb39aa1f334d19238a9824fd_37885_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/10_hu8aeb8fb2cb39aa1f334d19238a9824fd_37885_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%2010.png">
+&lt;/a>
+&lt;figcaption>Untitled%2010.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>An Ovonic Threshold Switch (OTS). 每次当电压移除温度下降时，会重新回到非晶体状态，永远不会出现晶体状态，所以不可以用作存储器但是可以作为开关使用。&lt;/p>
+&lt;p>在 crossbar 布局中与没有 PCM 存储单元串联放置一个 OTS，则只有在施加足够电压使 OTS 导通后，我们才能访问 PCM 存储单元。由于平行的线路一般由多个串联的 OTS/PCM 对组成，因此只有所选单元的 OTS 才能看到足够的电压才能接通，平行线路中的 OTS 全部保持关闭状态不导电，从而可以以最小的干扰读取存储单元的数据。熟悉 NAND Flash 的人可能会知道 NAND Flash 存在一种被称之为读取干扰的现象，因为读取操作可能会略微改变相邻单元格的存储电荷。PCM 由于读取时产生的热量远低于转化为结晶体所需的热量，意味着读取时不会干扰任何的存储单元。&lt;/p>
+&lt;h3 id="scalability-扩展性">Scalability 扩展性&lt;/h3>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 143;
+flex-basis: 345px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/11.png" data-size="587x408">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/11.png"
+width="587"
+height="408"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/11_hu06fdd35d49c5b44ebc38dbd7732ba8cb_18871_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/11_hu06fdd35d49c5b44ebc38dbd7732ba8cb_18871_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%2011.png">
+&lt;/a>
+&lt;figcaption>Untitled%2011.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>由于制作工艺的提升 NAND Flash 面临着很多问题，比如耐久度的下降等。但是对于 PCM 存储来说确实相反的，因为 GST 材料具有电阻性，而且必须加热与周围环境保持热绝缘，所以 PCM 的尺寸越小越好。事实上，这些年来阻碍PCM技术发展的主要因素之一是所需的编程电流过高而无法在高密度设备中使用。较小的单元将在较小的面积上转化为较低的电阻，这意味着加热较小空间所需的功率较少，因此对给定单元进行编程需要的电压和电流较低。从技术上讲，目前的制程还有很大的进步的空间。不过要在标准硅晶片上获得完美分割的GST层的工艺极其复杂。因特尔和美光目前已经实现了 20nm 的工艺。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 140;
+flex-basis: 337px"
+>
+&lt;a href="http://example.org/2021/01/27/how-intel-optane-work/12.png" data-size="894x635">
+&lt;img src="http://example.org/2021/01/27/how-intel-optane-work/12.png"
+width="894"
+height="635"
+srcset="http://example.org/2021/01/27/how-intel-optane-work/12_hue02bbe8d6b06b175984c7f679c92765f_649495_480x0_resize_box_2.png 480w, http://example.org/2021/01/27/how-intel-optane-work/12_hue02bbe8d6b06b175984c7f679c92765f_649495_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+alt="Untitled%2012.png">
+&lt;/a>
+&lt;figcaption>Untitled%2012.png&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>根据&lt;a class="link" href="http://www.techinsights.com/about-techinsights/overview/blog/intel-3D-xpoint-memory-die-removed-from-intel-optane-pcm/" target="_blank" rel="noopener"
+>TechInsights&lt;/a>数据，XPoint 将 20nm节点用于字线和位线，单元尺寸为 0.00176 um2。上图的细线是两层堆叠的PCM单元。&lt;/p>
+&lt;p>XPoint 当前仅使用了两层，与位于 XPoint 阵列下方的控制电路相比，这些层显得非常的薄。这就留出了足够的空间来扩展更多的层，从而扩展提高单片的容量。当然，这种堆叠也有局限性，因为它们引入额外的平行路径，这些平行路径可能会干扰读取。虽然 OTS Selector 避免了这种情况，但是它们也并不是完美的开关，当平行路径的数量足够多时，任何会产生干扰。这意味着如果不研究出其他方式的话，堆叠的层数即单片容量将受到极大的限制。&lt;/p>
+&lt;h3 id="总结">总结&lt;/h3>
+&lt;p>上面我们介绍了什么是相变化材料，相变化存储器（PCM）的读取过程，以及 Selector 可能的 实现方式，基本上了解清楚了 XPoint 的工作原理。不过目前因特尔并没有公开公布过傲腾相关的技术细节，这些资料也是研究机构对市面上的傲腾产品逆向之后给出的结论。不过总的来说 PCM 存储器相较于 NAND Flash 有着更多的优点，PCM 可能是未来最有可能代替 NAND Flash 的技术了。希望几年后 PCM 能有技术上的突破，能像现在 NAND Flash 一样的白菜价。&lt;/p></description></item><item><title>Jetson Nano USB Boot 配置</title><link>http://example.org/2021/01/25/jetson-nano-usb-boot.html</link><pubDate>Mon, 25 Jan 2021 00:00:00 +0000</pubDate><guid>http://example.org/2021/01/25/jetson-nano-usb-boot.html</guid><description>&lt;img src="http://example.org/2021/01/25/jetson-nano-usb-boot/jetson-nano.jpg" alt="Featured image of post Jetson Nano USB Boot 配置" />&lt;p>Jetson Nano 是 NVIDIA 推出的 Aot 嵌入式平台，拥有 4 核心主频 1.43GHZ 的 Cortex-A57 CPU 和128组472GFLOPS （FP16）的Maxwell架构 GPU 以及 4GB LPDDR4 内存。 配置十分强大，可是和树莓派一样默认使用 SD 卡作为存储，SD 卡到性能直接影响了日常到使用体验。而大容量高速的 SD 卡价格实在感人。考虑到 Jetson Nano 拥有四个 USB3.0 5G 速率的接口，使用 USB 外接 SSD 也许是更好的解决方法。&lt;/p>
+&lt;p>这里首先介绍下 Jetson Nano 的启动过程，Jetson Nano 使用两阶段启动的方式，首先 Bootloader 会从 sdcard 加载一个比较小的 initrd (initial ramdisk)，可以理解为一个很小的系统，通过这个小系统再去加载 Linux Kernal。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">+------------------+ +--------+ +--------------+
+| | | | | |
+|bootloader&lt;span style="color:#f92672">(&lt;/span>u-boot&lt;span style="color:#f92672">)&lt;/span>+-------&amp;gt;+ initrd +------&amp;gt;+ Linux kernel |
+| | | | | |
++------------------+ +--------+ +--------------+
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Jetson Nano 官方文档并没有提到可以通过 USB 启动，默认的 initrd 系统也不包含 USB 驱动，所以initrd 没办法加载 USB 进行启动，Github 上有个项目叫做 &lt;a class="link" href="https://github.com/JetsonHacksNano/rootOnUSB" target="_blank" rel="noopener"
+>https://github.com/JetsonHacksNano/rootOnUSB&lt;/a> ，通过重新编译 initrd 添加 USB 驱动的方式，让 initrd 可以从 USB 设备启动 Linux。&lt;/p>
+&lt;p>但是经过尝试发现这种方式已经没有办法从 USB 启动 Jetson Nano 会让系统陷入无限重启的循环。考虑到这个项目最后更新还是17月以前，而现在 Jetson Nano 系统版本已经更新多次，可能已经无法兼容了。&lt;/p>
+&lt;p>无奈只能接上了串口可以调试启动过程，无意中发现现在版本的 U-Boot（Jetson Nano 的 Bootloader）在尝试检测 USB 设备，尝试翻阅 NVIDIA 相关文档也说明了这一点 &lt;a class="link" href="https://docs.nvidia.com/jetson/l4t/index.html#page/Tegra%20Linux%20Driver%20Package%20Development%20Guide/uboot_guide.html#wwpID0E06E0HA" target="_blank" rel="noopener"
+>https://docs.nvidia.com/jetson/l4t/index.html#page/Tegra Linux Driver Package Development Guide/uboot_guide.html#wwpID0E06E0HA&lt;/a>&lt;/p>
+&lt;blockquote>
+&lt;p>Boot Sequence and Sysboot Configuration Files
+U-Boot functionality includes a default booting scan sequence. It scans bootable devices in the following order:&lt;/p>
+&lt;ul>
+&lt;li>External SD card&lt;/li>
+&lt;li>Internal eMMC&lt;/li>
+&lt;li>USB device or NVMe device (Jetson TX2 series only)&lt;/li>
+&lt;li>NFS network via DHCP/PXE&lt;/li>
+&lt;/ul>
+&lt;/blockquote>
+&lt;p>所以其实官方的 Bootloader 已经早就支持了 USB 启动了，但是由于默认的镜像是为 SD 卡准备的，并不能直接用于 USB 设备。这里需要进行一点点修改。&lt;/p>
+&lt;p>首先直接将下载的 Jetson Nano 的 SD 镜像写入 SSD 中这里的过程和写入 SD 卡一样，由于 SD 镜像的文件系统是 ext4 格式，这里需要一台 Linux 系统的机器来挂载 ext4 的文件系统并修改启动参数。&lt;/p>
+&lt;p>将写好的 SSD 盘使用 &lt;code>parted&lt;/code> 打开，可以看到有这些分区&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">&amp;gt;&amp;gt; sudo parted /dev/sda
+GNU Parted 3.2
+Using /dev/sda
+Welcome to GNU Parted! Type &lt;span style="color:#e6db74">&amp;#39;help&amp;#39;&lt;/span> to view a list of commands.
+&lt;span style="color:#f92672">(&lt;/span>parted&lt;span style="color:#f92672">)&lt;/span> print
+Model: ATA INTEL SSDSC2BB16 &lt;span style="color:#f92672">(&lt;/span>scsi&lt;span style="color:#f92672">)&lt;/span>
+Disk /dev/sda: 160GB
+Sector size &lt;span style="color:#f92672">(&lt;/span>logical/physical&lt;span style="color:#f92672">)&lt;/span>: 512B/512B
+Partition Table: gpt
+Disk Flags:
+Number Start End Size File system Name Flags
+&lt;span style="color:#ae81ff">2&lt;/span> 1049kB 1180kB 131kB TBC
+&lt;span style="color:#ae81ff">3&lt;/span> 2097kB 2556kB 459kB RP1
+&lt;span style="color:#ae81ff">4&lt;/span> 3146kB 3736kB 590kB EBT
+&lt;span style="color:#ae81ff">5&lt;/span> 4194kB 4260kB 65.5kB WB0
+&lt;span style="color:#ae81ff">6&lt;/span> 5243kB 5439kB 197kB BPF
+&lt;span style="color:#ae81ff">7&lt;/span> 6291kB 6685kB 393kB BPF-DTB
+&lt;span style="color:#ae81ff">8&lt;/span> 7340kB 7406kB 65.5kB FX
+&lt;span style="color:#ae81ff">9&lt;/span> 8389kB 8847kB 459kB TOS
+&lt;span style="color:#ae81ff">10&lt;/span> 9437kB 9896kB 459kB DTB
+&lt;span style="color:#ae81ff">11&lt;/span> 10.5MB 11.3MB 786kB LNX
+&lt;span style="color:#ae81ff">12&lt;/span> 11.5MB 11.6MB 65.5kB EKS
+&lt;span style="color:#ae81ff">13&lt;/span> 12.6MB 12.8MB 197kB BMP
+&lt;span style="color:#ae81ff">14&lt;/span> 13.6MB 13.8MB 131kB RP4
+&lt;span style="color:#ae81ff">1&lt;/span> 14.7MB 160GB 160GB ext4 APP
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>需要挂载的分区是 APP 这里将 APP 分区即 &lt;code>/dev/sda1&lt;/code> 挂载到 &lt;code>/mnt&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">sudo mount /dev/sda1 /mnt
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>打开 &lt;code>/mnt/boot/extlinux/extlinux.conf&lt;/code> 文件，可以看到镜像默认将 root 指向了 &lt;code>/dev/mmcblk0p1&lt;/code> 即 sd 卡的第一个分区&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">LABEL primary
+MENU LABEL primary kernel
+LINUX /boot/Image
+INITRD /boot/initrd
+APPEND &lt;span style="color:#e6db74">${&lt;/span>cbootargs&lt;span style="color:#e6db74">}&lt;/span> quiet root&lt;span style="color:#f92672">=&lt;/span>/dev/mmcblk0p1 rw rootwait rootfstype&lt;span style="color:#f92672">=&lt;/span>ext4 console&lt;span style="color:#f92672">=&lt;/span>ttyS0,115200n8 console&lt;span style="color:#f92672">=&lt;/span>tty0 fbcon&lt;span style="color:#f92672">=&lt;/span>map:0 net.ifnames&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#ae81ff">0&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>直接将 &lt;code>/dev/mmcblk0p1&lt;/code> 改成 &lt;code>/dev/sda1&lt;/code> 即可&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">LABEL primary
+MENU LABEL primary kernel
+LINUX /boot/Image
+INITRD /boot/initrd
+APPEND &lt;span style="color:#e6db74">${&lt;/span>cbootargs&lt;span style="color:#e6db74">}&lt;/span> quiet root&lt;span style="color:#f92672">=&lt;/span>/dev/sda1 rw rootwait rootfstype&lt;span style="color:#f92672">=&lt;/span>ext4 console&lt;span style="color:#f92672">=&lt;/span>ttyS0,115200n8 console&lt;span style="color:#f92672">=&lt;/span>tty0 fbcon&lt;span style="color:#f92672">=&lt;/span>map:0 net.ifnames&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#ae81ff">0&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>这里更加保险的做法应该是使用分区的 UUID 或者 LABEL 来指定磁盘，但是经过测试不管是 UUID 还是 LABEL 均会导致启动失败。所以要注意使用 USB 启动时，在 Jetson Nano 开机的时候只能插一个磁盘，不然可能会导致启动失败&lt;/p>
+&lt;p>现在从 Jetson Nano 中移除现有的 SD 卡，插入 USB SSD 重新启动就能从 USB 启动。&lt;/p>
+&lt;p>如果使用 USB 外接 SSD 需要注意，最好使用 5V4A 的电源，而不要使用 microUSB 供电。非常容易导致供电不足。&lt;/p>
+&lt;p>最后附上 USB SSD 与 SD 卡的性能测试，虽然 Jetson Nano 的 USB 3.0 接口比较拉胯，但是依然可以秒杀 SD 卡，平时使用在编译时也可以感觉到明显的性能提升。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">&lt;span style="color:#75715e"># USB SSD (Intel DC S3500 160G)&lt;/span>
+READ: bw&lt;span style="color:#f92672">=&lt;/span>263MiB/s &lt;span style="color:#f92672">(&lt;/span>276MB/s&lt;span style="color:#f92672">)&lt;/span>, 263MiB/s-263MiB/s &lt;span style="color:#f92672">(&lt;/span>276MB/s-276MB/s&lt;span style="color:#f92672">)&lt;/span>, io&lt;span style="color:#f92672">=&lt;/span>8192MiB &lt;span style="color:#f92672">(&lt;/span>8590MB&lt;span style="color:#f92672">)&lt;/span>, run&lt;span style="color:#f92672">=&lt;/span>31169-31169msec
+WRITE: bw&lt;span style="color:#f92672">=&lt;/span>101MiB/s &lt;span style="color:#f92672">(&lt;/span>106MB/s&lt;span style="color:#f92672">)&lt;/span>, 101MiB/s-101MiB/s &lt;span style="color:#f92672">(&lt;/span>106MB/s-106MB/s&lt;span style="color:#f92672">)&lt;/span>, io&lt;span style="color:#f92672">=&lt;/span>4096MiB &lt;span style="color:#f92672">(&lt;/span>4295MB&lt;span style="color:#f92672">)&lt;/span>, run&lt;span style="color:#f92672">=&lt;/span>40686-40686msec
+&lt;span style="color:#75715e"># SDCard (KIOXIA EXCERIA 32G U1)&lt;/span>
+READ: bw&lt;span style="color:#f92672">=&lt;/span>85.6MiB/s &lt;span style="color:#f92672">(&lt;/span>89.8MB/s&lt;span style="color:#f92672">)&lt;/span>, 85.6MiB/s-85.6MiB/s &lt;span style="color:#f92672">(&lt;/span>89.8MB/s-89.8MB/s&lt;span style="color:#f92672">)&lt;/span>, io&lt;span style="color:#f92672">=&lt;/span>8192MiB &lt;span style="color:#f92672">(&lt;/span>8590MB&lt;span style="color:#f92672">)&lt;/span>, run&lt;span style="color:#f92672">=&lt;/span>95709-95709msec
+WRITE: bw&lt;span style="color:#f92672">=&lt;/span>12.2MiB/s &lt;span style="color:#f92672">(&lt;/span>12.8MB/s&lt;span style="color:#f92672">)&lt;/span>, 12.2MiB/s-12.2MiB/s &lt;span style="color:#f92672">(&lt;/span>12.8MB/s-12.8MB/s&lt;span style="color:#f92672">)&lt;/span>, io&lt;span style="color:#f92672">=&lt;/span>512MiB &lt;span style="color:#f92672">(&lt;/span>537MB&lt;span style="color:#f92672">)&lt;/span>, run&lt;span style="color:#f92672">=&lt;/span>42007-42007msec
+&lt;/code>&lt;/pre>&lt;/div></description></item><item><title>记一次 ImageMagick jpeg 缩放性能调优</title><link>http://example.org/2020/10/11/imagemagick-tuning.html</link><pubDate>Sun, 11 Oct 2020 00:00:00 +0000</pubDate><guid>http://example.org/2020/10/11/imagemagick-tuning.html</guid><description>&lt;img src="http://example.org/2020/10/11/imagemagick-tuning/df35a6b35caea63c4be3c19947407fe4426a2b3c-small.jpg" alt="Featured image of post 记一次 ImageMagick jpeg 缩放性能调优" />&lt;p>由于同事了调岗，接手了一个简单的缩略图服务，大佬看之前的代码过于混(la)乱(ji)大手一挥带着我们用 C++ 重构了这个服务，故事就发生在新服务上线几周后。在一个愉快的周五下班后，正在桌上吃着火锅突然收到告警服务开始超时，赶紧联系同事重启了一波，但是效果甚微。无奈紧急切回来旧服务。&lt;/p>
+&lt;p>事后进行分析发现是因为有一张非常高分辨率的图片导致的，由于上传时只限制了用户上传的图片体积大小没有检查图片实际分辨率再加上上游服务的不合理重试，几乎让这张图片占满了所有的工作线程，最终导致雪崩。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 138;
+flex-basis: 333px"
+>
+&lt;a href="http://example.org/2020/10/11/imagemagick-tuning/df35a6b35caea63c4be3c19947407fe4426a2b3c-small.jpg" data-size="1000x720">
+&lt;img src="http://example.org/2020/10/11/imagemagick-tuning/df35a6b35caea63c4be3c19947407fe4426a2b3c-small.jpg"
+width="1000"
+height="720"
+srcset="http://example.org/2020/10/11/imagemagick-tuning/df35a6b35caea63c4be3c19947407fe4426a2b3c-small_hu2fc75db2453bb048d467a4727f6ed77a_213366_480x0_resize_q75_box.jpg 480w, http://example.org/2020/10/11/imagemagick-tuning/df35a6b35caea63c4be3c19947407fe4426a2b3c-small_hu2fc75db2453bb048d467a4727f6ed77a_213366_1024x0_resize_q75_box.jpg 1024w"
+loading="lazy"
+alt="罪魁祸首.jpeg">
+&lt;/a>
+&lt;figcaption>罪魁祸首.jpeg&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>由于图片太大上面的是缩略图，感兴趣的可以点击这里下载原图&lt;a class="link" href="df35a6b35caea63c4be3c19947407fe4426a2b3c.jpeg" >罪魁祸首.jpeg&lt;/a>, 原图的大小大小约 24000x17280 总像素超过4亿&lt;/p>
+&lt;h3 id="问题重现">问题重现&lt;/h3>
+&lt;p>竟然知道了问题是超高分辨率，就需要看看有没有可以优化的地方。图片处理我们主要使用的是 ImageMagick 这个开源库，首先将服务最小化，缩略图的主要逻辑大概就这几行&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c++" data-lang="c++">Magick&lt;span style="color:#f92672">::&lt;/span>Image im;
+im.read(&lt;span style="color:#e6db74">&amp;#34;big-img.jpeg&amp;#34;&lt;/span>);
+im.filterType(Magick&lt;span style="color:#f92672">::&lt;/span>LanczosFilter);
+im.resize(Magick&lt;span style="color:#f92672">::&lt;/span>Geometry(&lt;span style="color:#ae81ff">400&lt;/span>, &lt;span style="color:#ae81ff">288&lt;/span>));
+im.write(&lt;span style="color:#e6db74">&amp;#34;thumbnail.jpeg&amp;#34;&lt;/span>);
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>首先用出问题的图片跑一下试试 (因为一些资源管理问题，ImageMagick 在这里没有开启 openmp，都是单线程工作的)&lt;/p>
+&lt;pre>&lt;code>User time (seconds): 9.71
+System time (seconds): 0.96
+Percent of CPU this job got: 99%
+Maximum resident set size (kbytes): 4954472
+&lt;/code>&lt;/pre>&lt;p>在我自己电脑上大约需要 10s 占用约 4G 内存，实际在公司服务器大约需要 15s 左右 (AMD Yes!)，对于一个在线服务很明显是不能接受的。通过 perf 工具可以看出，CPU 主要都是花在 resize 的过程中。&lt;/p>
+&lt;p>调整 filterType 可以起到优化的左右，比如将但是调整 filterType 到 PointFilter，处理时间一下子就可以来到 1.4s 内存占用还是 4G，但是图片效果基本就不能接受了&lt;/p>
+&lt;pre>&lt;code>User time (seconds): 1.40
+System time (seconds): 0.91
+Percent of CPU this job got: 99%
+Maximum resident set size (kbytes): 4953288
+&lt;/code>&lt;/pre>&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 138;
+flex-basis: 333px"
+>
+&lt;a href="http://example.org/2020/10/11/imagemagick-tuning/pointfilter-1.jpeg" data-size="400x288">
+&lt;img src="http://example.org/2020/10/11/imagemagick-tuning/pointfilter-1.jpeg"
+width="400"
+height="288"
+srcset="http://example.org/2020/10/11/imagemagick-tuning/pointfilter-1_huf2e2f9a75bb0d59f349533868ace8fb9_57903_480x0_resize_q75_box.jpeg 480w, http://example.org/2020/10/11/imagemagick-tuning/pointfilter-1_huf2e2f9a75bb0d59f349533868ace8fb9_57903_1024x0_resize_q75_box.jpeg 1024w"
+loading="lazy"
+alt="pointfilter-1.jpeg">
+&lt;/a>
+&lt;figcaption>pointfilter-1.jpeg&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>而且修改 filterType 可能会导致其他图片最终呈现的效果与约定的不一致，所以 filterType 基本上是不能修改的。&lt;/p>
+&lt;h3 id="从-imagemagick-入手">从 ImageMagick 入手&lt;/h3>
+&lt;p>为了解决这个问题我又去翻了一下 ImageMagick 的文档与代码，看看是不是已经有对这种超高分辨率的图片做缩略图的优化了，毕竟这个是很常见的需求。果然 ImageMagick 除了 &lt;code>resize&lt;/code> 还提供了一个 &lt;code>thumbnail&lt;/code> 的方法，&lt;code>thumbnail&lt;/code> 顾名思义就是用来生成缩略图的，翻了一下代码 &lt;code>thumbnail&lt;/code> 主要分为两个过程&lt;/p>
+&lt;ol>
+&lt;li>对原图进行简单采样及每隔 5 个像素点取一个，等于将原图长宽都缩小到以前的五分之一&lt;/li>
+&lt;li>进行普通 &lt;code>resize&lt;/code> 操作&lt;/li>
+&lt;/ol>
+&lt;p>因为第一步的采样过程非常暴力，所有只有到缩略图的大小是原图面积的 10% 以下而且原图的长宽都需要大于25像素，否则都会降级为普通的 &lt;code>resize&lt;/code> 操作&lt;/p>
+&lt;p>简单修改下代码进行测试&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c++" data-lang="c++">Magick&lt;span style="color:#f92672">::&lt;/span>Image im;
+im.read(&lt;span style="color:#e6db74">&amp;#34;big-img.jpeg&amp;#34;&lt;/span>);
+im.filterType(Magick&lt;span style="color:#f92672">::&lt;/span>LanczosFilter);
+im.thumbnail(Magick&lt;span style="color:#f92672">::&lt;/span>Geometry(&lt;span style="color:#ae81ff">400&lt;/span>, &lt;span style="color:#ae81ff">288&lt;/span>));
+im.write(&lt;span style="color:#e6db74">&amp;#34;thumbnail.jpeg&amp;#34;&lt;/span>);
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>改用 &lt;code>thumbnail&lt;/code> 耗时一下子降到到 1.4s 左右，基本和使用 PointFilter 性能差不多，而且最终输出的图片与直接进行 &lt;code>resize&lt;/code> 的结果从肉眼上基本没有差距，但是仍然会占用约 4G 左右的内存。&lt;/p>
+&lt;pre>&lt;code>User time (seconds): 1.44
+System time (seconds): 0.90
+Percent of CPU this job got: 99%
+Maximum resident set size (kbytes): 4912756
+&lt;/code>&lt;/pre>&lt;p>使用 &lt;code>thumbnail&lt;/code> 结果&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 138;
+flex-basis: 333px"
+>
+&lt;a href="http://example.org/2020/10/11/imagemagick-tuning/thumbnail-1.jpeg" data-size="400x288">
+&lt;img src="http://example.org/2020/10/11/imagemagick-tuning/thumbnail-1.jpeg"
+width="400"
+height="288"
+srcset="http://example.org/2020/10/11/imagemagick-tuning/thumbnail-1_hue3986c2b13178fba7736002e4ff90722_49247_480x0_resize_q75_box.jpeg 480w, http://example.org/2020/10/11/imagemagick-tuning/thumbnail-1_hue3986c2b13178fba7736002e4ff90722_49247_1024x0_resize_q75_box.jpeg 1024w"
+loading="lazy"
+alt="thumbnail-1.jpeg">
+&lt;/a>
+&lt;figcaption>thumbnail-1.jpeg&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>直接 &lt;code>resize&lt;/code> 结果&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 138;
+flex-basis: 333px"
+>
+&lt;a href="http://example.org/2020/10/11/imagemagick-tuning/direct-resize.jpeg" data-size="400x288">
+&lt;img src="http://example.org/2020/10/11/imagemagick-tuning/direct-resize.jpeg"
+width="400"
+height="288"
+srcset="http://example.org/2020/10/11/imagemagick-tuning/direct-resize_hu2c71c5a01e1e6cc3ad72b664c024de70_49150_480x0_resize_q75_box.jpeg 480w, http://example.org/2020/10/11/imagemagick-tuning/direct-resize_hu2c71c5a01e1e6cc3ad72b664c024de70_49150_1024x0_resize_q75_box.jpeg 1024w"
+loading="lazy"
+alt="direct-resize.jpeg">
+&lt;/a>
+&lt;figcaption>direct-resize.jpeg&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;h3 id="从-jpeg-格式入手">从 jpeg 格式入手&lt;/h3>
+&lt;p>虽然使用了 &lt;code>thumbnail&lt;/code> 可以解决耗时问题，但是一次处理要占用 4G 多内存还是不可接受的。要避免占用这么多内存就要避免一次把所有像素都放到内存里面，一般会想到的就是通过流式的方式处理数据，这样就能大大降低内存占用了，另一个开源的图片处理库&lt;a class="link" href="https://github.com/libvips/libvips" target="_blank" rel="noopener"
+>libvips&lt;/a> 就是这样做的，但是将 ImageMagick 改造成流式处理的话这个工作量就过大了。对于 jpeg 这种图片格式还有另外一种方式就是可以在解压像素的时候做到类似缩放的功能，这里就要牵扯到 jpeg 的工作原理了，jpeg 的压缩算法基于&lt;a class="link" href="https://zh.wikipedia.org/wiki/%E7%A6%BB%E6%95%A3%E4%BD%99%E5%BC%A6%E5%8F%98%E6%8D%A2" target="_blank" rel="noopener"
+>离散余弦变换&lt;/a>，这里打个比方可以理解为 jpeg 将像素存储在一个函数中，当解压的时候输入像素的下标就能获得这个像素原始的数据，比如对于一个 1000x1000 的图片，我希望在解压成一张 500*500 图片，那样在解压时我只要跳过那些我不需要的像素点就好了，当时实际情况更加复杂，jpeg 也不是存储在一个函数中的。这里推荐一个很好的介绍 jpeg 工作原理的视频 &lt;a class="link" href="https://www.youtube.com/watch?v=f2odrCGjOFY" target="_blank" rel="noopener"
+>How JPEG works&lt;/a>&lt;/p>
+&lt;p>有了这样的理论基础我们就可以实践了，其实 &lt;code>libjpeg&lt;/code> 已经提供了这个参数，可以再解压 jpeg 的时候指定缩放的比例，比例有固定的档位在 1~8 之间，也就是说最小只能缩放到原图的长宽的八分之一。 在 ImageMagick 中设置这个参数的方式有点诡异，代码如下，这里指定 &lt;code>jpeg:size&lt;/code> 其实只是指定了一个期望值实际获得的图片大小会是一个大于目标尺寸的最小值，比如这次测试的图片实际获得的图片大小是 3000x2160。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-c++" data-lang="c++">Magick&lt;span style="color:#f92672">::&lt;/span>Image im;
+MagickCore&lt;span style="color:#f92672">::&lt;/span>ImageInfo&lt;span style="color:#f92672">*&lt;/span> im_info &lt;span style="color:#f92672">=&lt;/span> im.imageInfo();
+im_info&lt;span style="color:#f92672">-&amp;gt;&lt;/span>options &lt;span style="color:#f92672">=&lt;/span> MagickCore&lt;span style="color:#f92672">::&lt;/span>NewSplayTree(MagickCore&lt;span style="color:#f92672">::&lt;/span>CompareSplayTreeString, (&lt;span style="color:#66d9ef">void&lt;/span>&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>)(&lt;span style="color:#66d9ef">void&lt;/span>&lt;span style="color:#f92672">*&lt;/span>)) &lt;span style="color:#66d9ef">nullptr&lt;/span>, (&lt;span style="color:#66d9ef">void&lt;/span>&lt;span style="color:#f92672">*&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>)(&lt;span style="color:#66d9ef">void&lt;/span>&lt;span style="color:#f92672">*&lt;/span>)) &lt;span style="color:#66d9ef">nullptr&lt;/span>);
+MagickCore&lt;span style="color:#f92672">::&lt;/span>AddValueToSplayTree((MagickCore&lt;span style="color:#f92672">::&lt;/span>SplayTreeInfo&lt;span style="color:#f92672">*&lt;/span>)(im_info&lt;span style="color:#f92672">-&amp;gt;&lt;/span>options), &lt;span style="color:#e6db74">&amp;#34;jpeg:size&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;400x288&amp;#34;&lt;/span>);
+im.read(&lt;span style="color:#e6db74">&amp;#34;big-img.jpeg&amp;#34;&lt;/span>);
+im.filterType(Magick&lt;span style="color:#f92672">::&lt;/span>LanczosFilter);
+im.resize(Magick&lt;span style="color:#f92672">::&lt;/span>Geometry(&lt;span style="color:#ae81ff">400&lt;/span>, &lt;span style="color:#ae81ff">288&lt;/span>));
+im.write(&lt;span style="color:#e6db74">&amp;#34;shrink-on-load.jpeg&amp;#34;&lt;/span>);
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>优化之后耗时降低到了 0.4s 左右，内存也降到了 100M！ 而且最终输出的结果与直接进行 &lt;code>resize&lt;/code> 的结果从肉眼上基本没有差距&lt;/p>
+&lt;pre>&lt;code>User time (seconds): 0.42
+System time (seconds): 0.02
+Percent of CPU this job got: 99%
+Maximum resident set size (kbytes): 104656
+&lt;/code>&lt;/pre>&lt;p>解压时缩放结果&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 138;
+flex-basis: 333px"
+>
+&lt;a href="http://example.org/2020/10/11/imagemagick-tuning/shrink-on-load.jpeg" data-size="400x288">
+&lt;img src="http://example.org/2020/10/11/imagemagick-tuning/shrink-on-load.jpeg"
+width="400"
+height="288"
+srcset="http://example.org/2020/10/11/imagemagick-tuning/shrink-on-load_hu80e10e32ba5b77d6eeb4656f1c5ccdee_49050_480x0_resize_q75_box.jpeg 480w, http://example.org/2020/10/11/imagemagick-tuning/shrink-on-load_hu80e10e32ba5b77d6eeb4656f1c5ccdee_49050_1024x0_resize_q75_box.jpeg 1024w"
+loading="lazy"
+alt="shrink-on-load.jpeg">
+&lt;/a>
+&lt;figcaption>shrink-on-load.jpeg&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;p>直接 &lt;code>resize&lt;/code> 结果&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 138;
+flex-basis: 333px"
+>
+&lt;a href="http://example.org/2020/10/11/imagemagick-tuning/shrink-on-load.jpeg" data-size="400x288">
+&lt;img src="http://example.org/2020/10/11/imagemagick-tuning/shrink-on-load.jpeg"
+width="400"
+height="288"
+srcset="http://example.org/2020/10/11/imagemagick-tuning/shrink-on-load_hu80e10e32ba5b77d6eeb4656f1c5ccdee_49050_480x0_resize_q75_box.jpeg 480w, http://example.org/2020/10/11/imagemagick-tuning/shrink-on-load_hu80e10e32ba5b77d6eeb4656f1c5ccdee_49050_1024x0_resize_q75_box.jpeg 1024w"
+loading="lazy"
+alt="shrink-on-load.jpeg">
+&lt;/a>
+&lt;figcaption>shrink-on-load.jpeg&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;h3 id="题外话">题外话&lt;/h3>
+&lt;p>因为 ImageMagick 不支持 SIMD 加速在测试的过程我也尝试过使用支持 SIMD 加速的图片库比如 &lt;a class="link" href="https://github.com/uploadcare/pillow-simd" target="_blank" rel="noopener"
+>pillow-simd&lt;/a> 处理完整分辨率的图像也基本能控制在 1s 级别，不能利用现代 CPU 的功能是 ImageMagick 的硬伤&lt;/p>
+&lt;h3 id="总结">总结&lt;/h3>
+&lt;p>这次缩略图的优化，对于这种超大分辨率的图片处理速度提升了一个数量级 (10s -&amp;gt; 0.5s) 同时内存占用也降到了一个数量级 (4G -&amp;gt; 100M)。基本上达到了在线服务的能力。这个故事告诉我们没事别去重构老服务😅&lt;/p>
+&lt;h3 id="参考">参考&lt;/h3>
+&lt;ul>
+&lt;li>&lt;a class="link" href="http://www.imagemagick.org/Usage/thumbnails/" target="_blank" rel="noopener"
+>Imagemagick thumbnails/&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://libjpeg-turbo.org/" target="_blank" rel="noopener"
+>libjpeg-turbo.org/&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://stackoverflow.com/questions/42022982/imagemagick-single-convert-command-performance" target="_blank" rel="noopener"
+>Imagemagick Single Convert Command Performance&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://www.youtube.com/watch?v=f2odrCGjOFY" target="_blank" rel="noopener"
+>How JPEG works&lt;/a>&lt;/li>
+&lt;/ul></description></item><item><title>9102 年在国内如何快速的下载 Docker 镜像, 现存 Docker 镜像源横评</title><link>http://example.org/2019/07/12/how-to-pull-docker-image-fast-in-china.html</link><pubDate>Fri, 12 Jul 2019 00:00:00 +0000</pubDate><guid>http://example.org/2019/07/12/how-to-pull-docker-image-fast-in-china.html</guid><description>&lt;img src="http://example.org/2019/07/12/how-to-pull-docker-image-fast-in-china/docker-hub.png" alt="Featured image of post 9102 年在国内如何快速的下载 Docker 镜像, 现存 Docker 镜像源横评" />&lt;p>Docker 从 2013 发布一直广受瞩目，但是随着 k8s 等项目的发展，Docker Swarm 的失败，Docker 作为一个底层的容器运行时越来越边缘化，而且随着例如 &lt;a class="link" href="github.com/rkt/rkt" >rkt&lt;/a>, &lt;a class="link" href="https://github.com/alibaba/pouch" target="_blank" rel="noopener"
+>pouch&lt;/a> 等项目的出现，Docker 作为底层容器运行时的地位也在受到挑战。&lt;/p>
+&lt;p>但是就目前来说 Docker 仍然是开发者快速部署开发依赖的最好选择，而且但是即使 Docker 不在了，Docker Image 也将作为一个标准的容器镜像格式保留下来。但是 2018 年低 Docker 却悄悄关掉了 Docker CN 中国的镜像源，众所周知国内的网络非常复杂，访问国外网站极其缓慢。所以这里对目前现存的几个 Docker 镜像源进行横评，为大家选择镜像源提供参考。&lt;/p>
+&lt;h3 id="主要对以下五个镜像源进行测试">主要对以下五个镜像源进行测试&lt;/h3>
+&lt;p>&lt;a class="link" href="https://github.com/Azure/container-service-for-azure-china/blob/master/aks/README.md#22-container-registry-proxy" target="_blank" rel="noopener"
+>Azure 中国镜像 &lt;code>https://dockerhub.azk8s.cn&lt;/code>&lt;/a>&lt;/p>
+&lt;p>&lt;a class="link" href="https://cr.console.aliyun.com/cn-hangzhou/mirrors" target="_blank" rel="noopener"
+>阿里云加速器 (需要登录阿里云账户)&lt;/a>&lt;/p>
+&lt;p>&lt;a class="link" href="https://kirk-enterprise.github.io/hub-docs/#/user-guide/mirror" target="_blank" rel="noopener"
+>七牛云加速器 &lt;code>https://reg-mirror.qiniu.com&lt;/code>&lt;/a>&lt;/p>
+&lt;p>&lt;a class="link" href="https://mirrors.ustc.edu.cn/help/dockerhub.html" target="_blank" rel="noopener"
+>中科大镜像源&lt;/a>&lt;/p>
+&lt;p>&lt;a class="link" href="https://www.daocloud.io/mirror" target="_blank" rel="noopener"
+>DaoCloud 加速器&lt;/a>&lt;/p>
+&lt;h3 id="测试主要包括两项">测试主要包括两项&lt;/h3>
+&lt;p>1、已缓存镜像速度: 通过拉取 Docker Hub 较为热门的 &lt;code>couchbase&lt;/code> 镜像测试镜像源已缓存镜像的下载速度&lt;/p>
+&lt;p>2、回源镜像速度: 通过拉取我本人自制的放在 Docker Hub 上的镜像，理论上应该不会被任何镜像缓存，测试回源速度&lt;/p>
+&lt;h3 id="测试结果">测试结果&lt;/h3>
+&lt;p>已缓存的镜像速度 测试使用 &lt;code>postgres:latest&lt;/code> 镜像，大小约 117 MB&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>&lt;/th>
+&lt;th>Azure 中国&lt;/th>
+&lt;th>阿里云加速器&lt;/th>
+&lt;th>七牛云加速器&lt;/th>
+&lt;th>中科大&lt;/th>
+&lt;th>DaoCloud 加速器&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>耗时&lt;/td>
+&lt;td>12.446s&lt;/td>
+&lt;td>13.324s&lt;/td>
+&lt;td>7:10.92s&lt;/td>
+&lt;td>3:36.48s&lt;/td>
+&lt;td>18.576s&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>回源镜像速度 测试使用个人打包的一个镜像大小约 268 MB&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>&lt;/th>
+&lt;th>Azure 中国&lt;/th>
+&lt;th>阿里云加速器&lt;/th>
+&lt;th>七牛云加速器&lt;/th>
+&lt;th>中科大&lt;/th>
+&lt;th>DaoCloud 加速器&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>耗时&lt;/td>
+&lt;td>44.696s&lt;/td>
+&lt;td>25.356s&lt;/td>
+&lt;td>1:09.56s&lt;/td>
+&lt;td>9:20.40s&lt;/td>
+&lt;td>38.069s&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;h3 id="结论">结论&lt;/h3>
+&lt;p>镜像源速度 阿里云 &amp;gt; Azure 中国 &amp;gt; DaoCloud &amp;gt; 中科大 &amp;gt; 七牛云加速器&lt;/p>
+&lt;p>由于阿里云加速器需要注册阿里云账户开启容器服务之后才有，所以这里强烈推荐使用 &lt;a class="link" href="https://github.com/Azure/container-service-for-azure-china/blob/master/aks/README.md#22-container-registry-proxy" target="_blank" rel="noopener"
+>Azure 中国镜像 &lt;code>https://dockerhub.azk8s.cn&lt;/code>&lt;/a> 的镜像加速服务。&lt;/p>
+&lt;p>这次测试比较意外的是七牛云的加速器竟然速度这么慢，感觉已经处于无人维护的状态了，在拉取 postgres 镜像过程中多次失败。强烈不推荐使用&lt;/p></description></item><item><title>Golang切片使用与内部实现(翻译)</title><link>http://example.org/2016/12/27/go-slices-usage-and-internals.html</link><pubDate>Tue, 27 Dec 2016 00:00:00 +0000</pubDate><guid>http://example.org/2016/12/27/go-slices-usage-and-internals.html</guid><description>&lt;img src="http://example.org/2016/12/27/go-slices-usage-and-internals/golang-arrays-and-slices.png" alt="Featured image of post Golang切片使用与内部实现(翻译)" />&lt;p>Golang的切片类型提供了一种简单高效的操作序列化类型数据的方式。切片和其他语言中的数组类似，不过含有一些特殊的属性。这篇文章我们就来看一下什么是切片和如何使用切片&lt;/p>
+&lt;h3 id="数组">数组&lt;/h3>
+&lt;p>切片类型是建立在数组类型上的抽象，所以在我们了解切片之前我们必须先了解数组。&lt;/p>
+&lt;p>数组类型定义了一种特定长度和元素的类型。例如，&lt;code>[4]int &lt;/code>代表了有四个&lt;code>int&lt;/code>元素的数组。数组的大小是固定的；它的大小是它类型的一部分（&lt;code>[4]int&lt;/code>和&lt;code>[5]int&lt;/code>是不同的，不兼容的类型）。数组可以直接定位，表达式&lt;code>s[n]&lt;/code>可以直接访问第n个元素，从零开始。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#66d9ef">var&lt;/span> &lt;span style="color:#a6e22e">a&lt;/span> [&lt;span style="color:#ae81ff">4&lt;/span>]&lt;span style="color:#66d9ef">int&lt;/span>
+&lt;span style="color:#a6e22e">a&lt;/span>[&lt;span style="color:#ae81ff">0&lt;/span>] = &lt;span style="color:#ae81ff">1&lt;/span>
+&lt;span style="color:#a6e22e">i&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> &lt;span style="color:#a6e22e">a&lt;/span>[&lt;span style="color:#ae81ff">0&lt;/span>]
+&lt;span style="color:#75715e">// i == 1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>数组不需要显式的初始化；一个零值的数组可以被使用，数组中每个元素是他们自己本身的零值(&lt;a class="link" href="https://golang.org/ref/spec#The_zero_value" target="_blank" rel="noopener"
+>golang零值参考这里&lt;/a>)&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#75715e">// a[2] == 0, the zero value of the int type
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>在内存中代表&lt;code>[4]int&lt;/code>就是4个整形的值顺序排列&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 760;
+flex-basis: 1824px"
+>
+&lt;a href="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-array.png" data-size="517x68">
+&lt;img src="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-array.png"
+width="517"
+height="68"
+srcset="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-array_hu5a3110f7f8a91ffcff07d25db842332b_1237_480x0_resize_box_2.png 480w, http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-array_hu5a3110f7f8a91ffcff07d25db842332b_1237_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+>
+&lt;/a>
+&lt;/figure>&lt;/p>
+&lt;p>Golang 中数组是个值。数组的变量代表着整个数组；而不是指向数组第一个元素的指针（这个和C语言中的情况不同）。这代表这当你分配或者传递数组变量时将会拷贝整个数组的内容。（为了避免复制你可以传递一个指向数组的指针，不过这时这就是数组的指针而不是数组了。）你可以把数组想成一种结构体但具有索引而不是命名字段的固定大小的复合值。&lt;/p>
+&lt;p>一个数组可以这样指定：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">b&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> [&lt;span style="color:#ae81ff">2&lt;/span>]&lt;span style="color:#66d9ef">string&lt;/span>{&lt;span style="color:#e6db74">&amp;#34;Penn&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;Teller&amp;#34;&lt;/span>}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>或者，你可以让编译器为你计算数组元素：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">b&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> [&lt;span style="color:#f92672">...&lt;/span>]&lt;span style="color:#66d9ef">string&lt;/span>{&lt;span style="color:#e6db74">&amp;#34;Penn&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;Teller&amp;#34;&lt;/span>}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>在这两种情况下，&lt;code>b&lt;/code>的类型都是&lt;code>[2]string&lt;/code>&lt;/p>
+&lt;h3 id="切片">切片&lt;/h3>
+&lt;p>数组有它的作用，但是它不够灵活，所以你经常在golang 的代码中见到它。切片，到处都有。切片建立在数组的基础上且更加的强大灵活。&lt;/p>
+&lt;p>&lt;code>[]T&lt;/code>是切片类型的定义，其中&lt;code>T&lt;/code>是切片中元素的类型，跟数组不同，切片类型没有长度。&lt;/p>
+&lt;p>声明一个切片和声明一个数组有点像，除了不需要指定元素个数&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">letters&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> []&lt;span style="color:#66d9ef">string&lt;/span>{&lt;span style="color:#e6db74">&amp;#34;a&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;b&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;c&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;d&amp;#34;&lt;/span>}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>一个切片可以由内置的&lt;code>make&lt;/code>函数创建&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#66d9ef">func&lt;/span> make([]&lt;span style="color:#a6e22e">T&lt;/span>, &lt;span style="color:#a6e22e">len&lt;/span>, &lt;span style="color:#a6e22e">cap&lt;/span>) []&lt;span style="color:#a6e22e">T&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>其中&lt;code>T&lt;/code>代表要创建的切片其中元素的类型，&lt;code>make&lt;/code>函数接受类型、长度和容量选项。调用时，&lt;code>make&lt;/code>分配一个数组和返回一个指向该数组的切片&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#66d9ef">var&lt;/span> &lt;span style="color:#a6e22e">s&lt;/span> []&lt;span style="color:#66d9ef">byte&lt;/span>
+&lt;span style="color:#a6e22e">s&lt;/span> = make([]&lt;span style="color:#66d9ef">byte&lt;/span>, &lt;span style="color:#ae81ff">5&lt;/span>, &lt;span style="color:#ae81ff">5&lt;/span>)
+&lt;span style="color:#75715e">// s == []byte{0, 0, 0, 0, 0}
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>当容量参数省略时，默认值等于指定的长度。这个有个更加简洁版本的代码：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">s&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> make([]&lt;span style="color:#66d9ef">byte&lt;/span>, &lt;span style="color:#ae81ff">5&lt;/span>)
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>可以使用内置的&lt;code>len&lt;/code>和&lt;code>cap&lt;/code>获取切片的长度和容量&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">len(&lt;span style="color:#a6e22e">s&lt;/span>) &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#ae81ff">5&lt;/span>
+cap(&lt;span style="color:#a6e22e">s&lt;/span>) &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#ae81ff">5&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>接下来，我们来看一下切片长度与容量直接的关系&lt;/p>
+&lt;p>零值的切片是&lt;code>nil&lt;/code>。&lt;code>nil&lt;/code>的切片&lt;code>len&lt;/code>和&lt;code>cap&lt;/code>函数都会返回0。&lt;/p>
+&lt;p>还可以通过切片现有的切片或者数组来生成切片。切片通过指定具有两个用冒号分隔的索引的半开范围来完成。比如，表达式&lt;code>b[1:4]&lt;/code>创建了一个切片包含了&lt;code>b&lt;/code>中1到3的元素（得带的切片的索引是0到2）。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">b&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> []&lt;span style="color:#66d9ef">byte&lt;/span>{&lt;span style="color:#e6db74">&amp;#39;g&amp;#39;&lt;/span>, &lt;span style="color:#e6db74">&amp;#39;o&amp;#39;&lt;/span>, &lt;span style="color:#e6db74">&amp;#39;l&amp;#39;&lt;/span>, &lt;span style="color:#e6db74">&amp;#39;a&amp;#39;&lt;/span>, &lt;span style="color:#e6db74">&amp;#39;n&amp;#39;&lt;/span>, &lt;span style="color:#e6db74">&amp;#39;g&amp;#39;&lt;/span>}
+&lt;span style="color:#75715e">// b[1:4] == []byte{&amp;#39;o&amp;#39;, &amp;#39;l&amp;#39;, &amp;#39;a&amp;#39;}, sharing the same storage as b
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>切片表达式的开始和结束索引是可选的;它们分别默认为零和切片的长度：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#75715e">// b[:2] == []byte{&amp;#39;g&amp;#39;, &amp;#39;o&amp;#39;}
+&lt;/span>&lt;span style="color:#75715e">// b[2:] == []byte{&amp;#39;l&amp;#39;, &amp;#39;a&amp;#39;, &amp;#39;n&amp;#39;, &amp;#39;g&amp;#39;}
+&lt;/span>&lt;span style="color:#75715e">// b[:] == b
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>通过数组创建切片的语法也一样：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">x&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> [&lt;span style="color:#ae81ff">3&lt;/span>]&lt;span style="color:#66d9ef">string&lt;/span>{&lt;span style="color:#e6db74">&amp;#34;Лайка&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;Белка&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;Стрелка&amp;#34;&lt;/span>}
+&lt;span style="color:#a6e22e">s&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> &lt;span style="color:#a6e22e">x&lt;/span>[:] &lt;span style="color:#75715e">// a slice referencing the storage of x
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="切片内部">切片内部&lt;/h3>
+&lt;p>切片是数组段的描述符。它由指向数组的指针，段的长度及其容量（段的最大长度）组成。&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 261;
+flex-basis: 626px"
+>
+&lt;a href="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-struct.png" data-size="517x198">
+&lt;img src="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-struct.png"
+width="517"
+height="198"
+srcset="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-struct_huc8289134f44b8d2e744099b8c1f2005a_3650_480x0_resize_box_2.png 480w, http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-struct_huc8289134f44b8d2e744099b8c1f2005a_3650_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+>
+&lt;/a>
+&lt;/figure>&lt;/p>
+&lt;p>我们先前由&lt;code>make([]byte,5)&lt;/code>创建的变量&lt;code>s&lt;/code>的结构如下：&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 267;
+flex-basis: 642px"
+>
+&lt;a href="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-1.png" data-size="517x193">
+&lt;img src="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-1.png"
+width="517"
+height="193"
+srcset="http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-1_hu6eaee86cb225b00d5958a365785f0443_6334_480x0_resize_box_2.png 480w, http://example.org/2016/12/27/go-slices-usage-and-internals/go-slices-usage-and-internals_slice-1_hu6eaee86cb225b00d5958a365785f0443_6334_1024x0_resize_box_2.png 1024w"
+loading="lazy"
+>
+&lt;/a>
+&lt;/figure>&lt;/p>
+&lt;p>长度是切片引用的元素的数量。容量是底层数组中元素的数量（从slice指针引用的元素开始）。将通过下面几个小例子，将帮助你理解长度和容量之间的区别。&lt;/p>
+&lt;p>在我们切片时，观察切片数据结构中的变化及其与基础数组的关系：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">s&lt;/span> = &lt;span style="color:#a6e22e">s&lt;/span>[&lt;span style="color:#ae81ff">2&lt;/span>:&lt;span style="color:#ae81ff">4&lt;/span>]
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>!()[https://blog.golang.org/go-slices-usage-and-internals_slice-2.png]&lt;/p>
+&lt;p>切片操作不会拷贝已有的切片数据，将创建一个新的切片指向原来的数组。这使得切片操作与操作数组索引一样高效。因此，修改重新切片的元素（而不是切片本身）将修改原始切片的元素：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">d&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> []&lt;span style="color:#66d9ef">byte&lt;/span>{&lt;span style="color:#e6db74">&amp;#39;r&amp;#39;&lt;/span>, &lt;span style="color:#e6db74">&amp;#39;o&amp;#39;&lt;/span>, &lt;span style="color:#e6db74">&amp;#39;a&amp;#39;&lt;/span>, &lt;span style="color:#e6db74">&amp;#39;d&amp;#39;&lt;/span>}
+&lt;span style="color:#a6e22e">e&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> &lt;span style="color:#a6e22e">d&lt;/span>[&lt;span style="color:#ae81ff">2&lt;/span>:]
+&lt;span style="color:#75715e">// e == []byte{&amp;#39;a&amp;#39;, &amp;#39;d&amp;#39;}
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#a6e22e">e&lt;/span>[&lt;span style="color:#ae81ff">1&lt;/span>] = &lt;span style="color:#e6db74">&amp;#39;m&amp;#39;&lt;/span>
+&lt;span style="color:#75715e">// e == []byte{&amp;#39;a&amp;#39;, &amp;#39;m&amp;#39;}
+&lt;/span>&lt;span style="color:#75715e">// d == []byte{&amp;#39;r&amp;#39;, &amp;#39;o&amp;#39;, &amp;#39;a&amp;#39;, &amp;#39;m&amp;#39;}
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>之前我们把&lt;code>s&lt;/code>切片成长度比容量少的切片，我们可以通过重新切片将它长度增长和容量一样大(我之前还真不知道能这么玩😂)：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">s&lt;/span> = &lt;span style="color:#a6e22e">s&lt;/span>[:cap(&lt;span style="color:#a6e22e">s&lt;/span>)]
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>切片不能超越其容量。尝试这样做会导致运行时panic，就像在切片或数组的边界外建立索引一样。类似地，切片不能在零以下重新切片以访问数组中的早期元素。&lt;/p>
+&lt;h3 id="切片增长拷贝和append函数">切片增长（拷贝和append函数）&lt;/h3>
+&lt;p>为了增加切片的容量，必须创建一个新的较大切片，并将原始切片的内容复制到其中。这种技术就是其他语言的动态数组的背后实现。下一个例子通过制作一个新的切片&lt;code>t&lt;/code>，将&lt;code>s&lt;/code>的内容复制到&lt;code>t&lt;/code>，然后将切片值&lt;code>t&lt;/code>分配给&lt;code>s&lt;/code>来使&lt;code>s&lt;/code>的容量加倍：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">t&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> make([]&lt;span style="color:#66d9ef">byte&lt;/span>, len(&lt;span style="color:#a6e22e">s&lt;/span>), (cap(&lt;span style="color:#a6e22e">s&lt;/span>)&lt;span style="color:#f92672">+&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>)&lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#ae81ff">2&lt;/span>) &lt;span style="color:#75715e">// +1 in case cap(s) == 0
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">for&lt;/span> &lt;span style="color:#a6e22e">i&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> &lt;span style="color:#66d9ef">range&lt;/span> &lt;span style="color:#a6e22e">s&lt;/span> {
+&lt;span style="color:#a6e22e">t&lt;/span>[&lt;span style="color:#a6e22e">i&lt;/span>] = &lt;span style="color:#a6e22e">s&lt;/span>[&lt;span style="color:#a6e22e">i&lt;/span>]
+}
+&lt;span style="color:#a6e22e">s&lt;/span> = &lt;span style="color:#a6e22e">t&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>通过内置的&lt;code>copy&lt;/code>函数可以更加容易的实现这种循环操作。顾名思义，复制将数据从源切片复制到目标切片。它返回复制的元素数。&lt;/p>
+&lt;p>复制功能支持在不同长度的切片之间进行复制（它只会复制到较少数量的元素）。此外，副本可以处理共享相同底层数组的源和目标slice，正确处理重叠slice。&lt;/p>
+&lt;p>使用copy，我们可以简化上面的代码片段：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">t&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> make([]&lt;span style="color:#66d9ef">byte&lt;/span>, len(&lt;span style="color:#a6e22e">s&lt;/span>), (cap(&lt;span style="color:#a6e22e">s&lt;/span>)&lt;span style="color:#f92672">+&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>)&lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#ae81ff">2&lt;/span>)
+copy(&lt;span style="color:#a6e22e">t&lt;/span>, &lt;span style="color:#a6e22e">s&lt;/span>)
+&lt;span style="color:#a6e22e">s&lt;/span> = &lt;span style="color:#a6e22e">t&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>常见的操作是将数据附加到切片的末尾。此函数将字节元素附加到字节片，如果必要，增长切片，并返回新的切片：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#66d9ef">func&lt;/span> &lt;span style="color:#a6e22e">AppendByte&lt;/span>(&lt;span style="color:#a6e22e">slice&lt;/span> []&lt;span style="color:#66d9ef">byte&lt;/span>, &lt;span style="color:#a6e22e">data&lt;/span> &lt;span style="color:#f92672">...&lt;/span>&lt;span style="color:#66d9ef">byte&lt;/span>) []&lt;span style="color:#66d9ef">byte&lt;/span> {
+&lt;span style="color:#a6e22e">m&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> len(&lt;span style="color:#a6e22e">slice&lt;/span>)
+&lt;span style="color:#a6e22e">n&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> &lt;span style="color:#a6e22e">m&lt;/span> &lt;span style="color:#f92672">+&lt;/span> len(&lt;span style="color:#a6e22e">data&lt;/span>)
+&lt;span style="color:#66d9ef">if&lt;/span> &lt;span style="color:#a6e22e">n&lt;/span> &amp;gt; cap(&lt;span style="color:#a6e22e">slice&lt;/span>) { &lt;span style="color:#75715e">// if necessary, reallocate
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#75715e">// allocate double what&amp;#39;s needed, for future growth.
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#a6e22e">newSlice&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> make([]&lt;span style="color:#66d9ef">byte&lt;/span>, (&lt;span style="color:#a6e22e">n&lt;/span>&lt;span style="color:#f92672">+&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>)&lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#ae81ff">2&lt;/span>)
+copy(&lt;span style="color:#a6e22e">newSlice&lt;/span>, &lt;span style="color:#a6e22e">slice&lt;/span>)
+&lt;span style="color:#a6e22e">slice&lt;/span> = &lt;span style="color:#a6e22e">newSlice&lt;/span>
+}
+&lt;span style="color:#a6e22e">slice&lt;/span> = &lt;span style="color:#a6e22e">slice&lt;/span>[&lt;span style="color:#ae81ff">0&lt;/span>:&lt;span style="color:#a6e22e">n&lt;/span>]
+copy(&lt;span style="color:#a6e22e">slice&lt;/span>[&lt;span style="color:#a6e22e">m&lt;/span>:&lt;span style="color:#a6e22e">n&lt;/span>], &lt;span style="color:#a6e22e">data&lt;/span>)
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#a6e22e">slice&lt;/span>
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>可以使用AppendByte这样：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">p&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> []&lt;span style="color:#66d9ef">byte&lt;/span>{&lt;span style="color:#ae81ff">2&lt;/span>, &lt;span style="color:#ae81ff">3&lt;/span>, &lt;span style="color:#ae81ff">5&lt;/span>}
+&lt;span style="color:#a6e22e">p&lt;/span> = &lt;span style="color:#a6e22e">AppendByte&lt;/span>(&lt;span style="color:#a6e22e">p&lt;/span>, &lt;span style="color:#ae81ff">7&lt;/span>, &lt;span style="color:#ae81ff">11&lt;/span>, &lt;span style="color:#ae81ff">13&lt;/span>)
+&lt;span style="color:#75715e">// p == []byte{2, 3, 5, 7, 11, 13}
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>像AppendByte这样的函数很有用，因为它们提供对切片生长方式的完全控制。根据程序的特性，可能需要分配更小或更大的块，或者对重新分配的大小设置上限。&lt;/p>
+&lt;p>但是大多数程序不需要完全控制，所以Go提供了一个内置的&lt;code>append&lt;/code>函数，适合大多数用途; 函数声明：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#66d9ef">func&lt;/span> append(&lt;span style="color:#a6e22e">s&lt;/span> []&lt;span style="color:#a6e22e">T&lt;/span>, &lt;span style="color:#a6e22e">x&lt;/span> &lt;span style="color:#f92672">...&lt;/span>&lt;span style="color:#a6e22e">T&lt;/span>) []&lt;span style="color:#a6e22e">T&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>append&lt;/code>函数将元素x附加到切片的末尾，如果需要更大的容量，则增长切片。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">a&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> make([]&lt;span style="color:#66d9ef">int&lt;/span>, &lt;span style="color:#ae81ff">1&lt;/span>)
+&lt;span style="color:#75715e">// a == []int{0}
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#a6e22e">a&lt;/span> = append(&lt;span style="color:#a6e22e">a&lt;/span>, &lt;span style="color:#ae81ff">1&lt;/span>, &lt;span style="color:#ae81ff">2&lt;/span>, &lt;span style="color:#ae81ff">3&lt;/span>)
+&lt;span style="color:#75715e">// a == []int{0, 1, 2, 3}
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>要将一个切片附加到另一个切片，请使用&amp;hellip;将第二个参数展开为参数列表。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#a6e22e">a&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> []&lt;span style="color:#66d9ef">string&lt;/span>{&lt;span style="color:#e6db74">&amp;#34;John&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;Paul&amp;#34;&lt;/span>}
+&lt;span style="color:#a6e22e">b&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> []&lt;span style="color:#66d9ef">string&lt;/span>{&lt;span style="color:#e6db74">&amp;#34;George&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;Ringo&amp;#34;&lt;/span>, &lt;span style="color:#e6db74">&amp;#34;Pete&amp;#34;&lt;/span>}
+&lt;span style="color:#a6e22e">a&lt;/span> = append(&lt;span style="color:#a6e22e">a&lt;/span>, &lt;span style="color:#a6e22e">b&lt;/span>&lt;span style="color:#f92672">...&lt;/span>) &lt;span style="color:#75715e">// equivalent to &amp;#34;append(a, b[0], b[1], b[2])&amp;#34;
+&lt;/span>&lt;span style="color:#75715e">// a == []string{&amp;#34;John&amp;#34;, &amp;#34;Paul&amp;#34;, &amp;#34;George&amp;#34;, &amp;#34;Ringo&amp;#34;, &amp;#34;Pete&amp;#34;}
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>由于切片的零值（nil）的行为类似于零长度切片，因此你可以声明切片变量，然后在循环中附加切片变量：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#75715e">// Filter returns a new slice holding only
+&lt;/span>&lt;span style="color:#75715e">// the elements of s that satisfy f()
+&lt;/span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">func&lt;/span> &lt;span style="color:#a6e22e">Filter&lt;/span>(&lt;span style="color:#a6e22e">s&lt;/span> []&lt;span style="color:#66d9ef">int&lt;/span>, &lt;span style="color:#a6e22e">fn&lt;/span> &lt;span style="color:#66d9ef">func&lt;/span>(&lt;span style="color:#66d9ef">int&lt;/span>) &lt;span style="color:#66d9ef">bool&lt;/span>) []&lt;span style="color:#66d9ef">int&lt;/span> {
+&lt;span style="color:#66d9ef">var&lt;/span> &lt;span style="color:#a6e22e">p&lt;/span> []&lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#75715e">// == nil
+&lt;/span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">for&lt;/span> &lt;span style="color:#a6e22e">_&lt;/span>, &lt;span style="color:#a6e22e">v&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> &lt;span style="color:#66d9ef">range&lt;/span> &lt;span style="color:#a6e22e">s&lt;/span> {
+&lt;span style="color:#66d9ef">if&lt;/span> &lt;span style="color:#a6e22e">fn&lt;/span>(&lt;span style="color:#a6e22e">v&lt;/span>) {
+&lt;span style="color:#a6e22e">p&lt;/span> = append(&lt;span style="color:#a6e22e">p&lt;/span>, &lt;span style="color:#a6e22e">v&lt;/span>)
+}
+}
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#a6e22e">p&lt;/span>
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="一个小问题">一个小问题&lt;/h3>
+&lt;p>如前所述，重新切片切片不会生成底层数组的副本。完整数组将保存在内存中，直到它不再被引用。有时可能导致只需要数组中一点点内容，但是整个数组都被保存在内存中。
+例如，此FindDigits函数将文件加载到内存中，并搜索第一组连续数字，将其作为新切片返回。&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#66d9ef">var&lt;/span> &lt;span style="color:#a6e22e">digitRegexp&lt;/span> = &lt;span style="color:#a6e22e">regexp&lt;/span>.&lt;span style="color:#a6e22e">MustCompile&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;[0-9]+&amp;#34;&lt;/span>)
+&lt;span style="color:#66d9ef">func&lt;/span> &lt;span style="color:#a6e22e">FindDigits&lt;/span>(&lt;span style="color:#a6e22e">filename&lt;/span> &lt;span style="color:#66d9ef">string&lt;/span>) []&lt;span style="color:#66d9ef">byte&lt;/span> {
+&lt;span style="color:#a6e22e">b&lt;/span>, &lt;span style="color:#a6e22e">_&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> &lt;span style="color:#a6e22e">ioutil&lt;/span>.&lt;span style="color:#a6e22e">ReadFile&lt;/span>(&lt;span style="color:#a6e22e">filename&lt;/span>)
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#a6e22e">digitRegexp&lt;/span>.&lt;span style="color:#a6e22e">Find&lt;/span>(&lt;span style="color:#a6e22e">b&lt;/span>)
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>此代码的行为与期望一样，但返回的&lt;code>[]byte&lt;/code>指向包含整个文件的数组。因为切片引用原始数组，只要切片被保留,垃圾收集器就不能释放数组；文件的整个内容保存在内存中但有用的只有一点。&lt;/p>
+&lt;p>要解决这个问题，可以将需要的数据复制到一个新的切片，然后返回它：&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-go" data-lang="go">&lt;span style="color:#66d9ef">func&lt;/span> &lt;span style="color:#a6e22e">CopyDigits&lt;/span>(&lt;span style="color:#a6e22e">filename&lt;/span> &lt;span style="color:#66d9ef">string&lt;/span>) []&lt;span style="color:#66d9ef">byte&lt;/span> {
+&lt;span style="color:#a6e22e">b&lt;/span>, &lt;span style="color:#a6e22e">_&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> &lt;span style="color:#a6e22e">ioutil&lt;/span>.&lt;span style="color:#a6e22e">ReadFile&lt;/span>(&lt;span style="color:#a6e22e">filename&lt;/span>)
+&lt;span style="color:#a6e22e">b&lt;/span> = &lt;span style="color:#a6e22e">digitRegexp&lt;/span>.&lt;span style="color:#a6e22e">Find&lt;/span>(&lt;span style="color:#a6e22e">b&lt;/span>)
+&lt;span style="color:#a6e22e">c&lt;/span> &lt;span style="color:#f92672">:=&lt;/span> make([]&lt;span style="color:#66d9ef">byte&lt;/span>, len(&lt;span style="color:#a6e22e">b&lt;/span>))
+copy(&lt;span style="color:#a6e22e">c&lt;/span>, &lt;span style="color:#a6e22e">b&lt;/span>)
+&lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#a6e22e">c&lt;/span>
+}
+&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="参考">参考&lt;/h3>
+&lt;p>原文&lt;a class="link" href="https://blog.golang.org/go-slices-usage-and-internals" target="_blank" rel="noopener"
+>Go Slices: usage and internals&lt;/a>&lt;/p></description></item><item><title>一种回溯的解数独算法</title><link>http://example.org/2016/08/21/sudoku.html</link><pubDate>Sun, 21 Aug 2016 00:00:00 +0000</pubDate><guid>http://example.org/2016/08/21/sudoku.html</guid><description>&lt;img src="http://example.org/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg" alt="Featured image of post 一种回溯的解数独算法" />&lt;p>数独是一种逻辑性的数字填充游戏，玩家须以数字填进每一格，而每行、每列和每个宫（即3x3的大格）有齐1至9所有数字。游戏设计者会提供一部分的数字，使谜题只有一个答案。&lt;/p>
+&lt;p>&lt;figure
+>
+&lt;a href="http://example.org/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg" >
+&lt;img src="http://example.org/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg"
+loading="lazy"
+alt="一个经典的数独题">
+&lt;/a>
+&lt;figcaption>一个经典的数独题&lt;/figcaption>
+&lt;/figure>&lt;/p>
+&lt;h3 id="算法步骤">算法步骤&lt;/h3>
+&lt;ul>
+&lt;li>1、扫描整个9x9宫格，根据已有的数字找出每一个空格能够填充的所有数字，若出现某一个空格没有能够填充的数字，则进行回溯。&lt;/li>
+&lt;li>2、选择拥有最少能够填充数字的空格，从能够填充的数字中选取一个数填入该空格，将填入的空格位置和剩余的能够填充的数字压入历史堆栈&lt;/li>
+&lt;li>3、重复1直至所有空格均被填充，则完成&lt;/li>
+&lt;/ul>
+&lt;p>回溯操作&lt;/p>
+&lt;ul>
+&lt;li>1、从历史堆栈弹出一个元素，若堆栈为空，则该数独无解。&lt;/li>
+&lt;li>2、若弹出的元素的剩余可填充数字个数为0，则将该元素所纪录的空格从宫格中删除，重复1，否则，从剩余的可填充数字中选取一个重新填入该空格。&lt;/li>
+&lt;/ul>
+&lt;h3 id="代码实现">代码实现&lt;/h3>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">&lt;span style="color:#66d9ef">class&lt;/span> &lt;span style="color:#a6e22e">Sudoku&lt;/span>(object):
+&lt;span style="color:#e6db74">&amp;#34;&amp;#34;&amp;#34;
+&lt;/span>&lt;span style="color:#e6db74"> Sudoku solver
+&lt;/span>&lt;span style="color:#e6db74"> &amp;#34;&amp;#34;&amp;#34;&lt;/span>
+&lt;span style="color:#66d9ef">def&lt;/span> __init__(self, matrix):
+self&lt;span style="color:#f92672">.&lt;/span>matrix &lt;span style="color:#f92672">=&lt;/span> matrix
+self&lt;span style="color:#f92672">.&lt;/span>history_stack &lt;span style="color:#f92672">=&lt;/span> []
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">_push_history&lt;/span>(self, pos, val_list):
+self&lt;span style="color:#f92672">.&lt;/span>history_stack&lt;span style="color:#f92672">.&lt;/span>append([pos] &lt;span style="color:#f92672">+&lt;/span> val_list)
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">_pop_history&lt;/span>(self):
+&lt;span style="color:#66d9ef">if&lt;/span> len(self&lt;span style="color:#f92672">.&lt;/span>history_stack) &lt;span style="color:#f92672">&amp;gt;&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>:
+&lt;span style="color:#66d9ef">if&lt;/span> len(self&lt;span style="color:#f92672">.&lt;/span>history_stack[&lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>]) &lt;span style="color:#f92672">&amp;gt;&lt;/span> &lt;span style="color:#ae81ff">1&lt;/span>:
+self&lt;span style="color:#f92672">.&lt;/span>_set_pos(self&lt;span style="color:#f92672">.&lt;/span>history_stack[&lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>][&lt;span style="color:#ae81ff">0&lt;/span>],
+self&lt;span style="color:#f92672">.&lt;/span>history_stack[&lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>]&lt;span style="color:#f92672">.&lt;/span>pop())
+&lt;span style="color:#66d9ef">else&lt;/span>:
+tem &lt;span style="color:#f92672">=&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>history_stack&lt;span style="color:#f92672">.&lt;/span>pop()
+self&lt;span style="color:#f92672">.&lt;/span>_set_pos(tem[&lt;span style="color:#ae81ff">0&lt;/span>], &lt;span style="color:#ae81ff">0&lt;/span>)
+self&lt;span style="color:#f92672">.&lt;/span>_pop_history()
+&lt;span style="color:#66d9ef">else&lt;/span>:
+&lt;span style="color:#66d9ef">raise&lt;/span> &lt;span style="color:#a6e22e">Exception&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;out of history_stack&amp;#34;&lt;/span>)
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">_set_pos&lt;/span>(self, pos, val):
+self&lt;span style="color:#f92672">.&lt;/span>matrix[pos &lt;span style="color:#f92672">//&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>][pos &lt;span style="color:#f92672">%&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>] &lt;span style="color:#f92672">=&lt;/span> val
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">_get_pos&lt;/span>(self, pos):
+&lt;span style="color:#66d9ef">return&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>matrix[pos &lt;span style="color:#f92672">//&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>][pos &lt;span style="color:#f92672">%&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>]
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">_get_available&lt;/span>(self, pos):
+ret &lt;span style="color:#f92672">=&lt;/span> [&lt;span style="color:#ae81ff">1&lt;/span>, &lt;span style="color:#ae81ff">2&lt;/span>, &lt;span style="color:#ae81ff">3&lt;/span>, &lt;span style="color:#ae81ff">4&lt;/span>, &lt;span style="color:#ae81ff">5&lt;/span>, &lt;span style="color:#ae81ff">6&lt;/span>, &lt;span style="color:#ae81ff">7&lt;/span>, &lt;span style="color:#ae81ff">8&lt;/span>, &lt;span style="color:#ae81ff">9&lt;/span>]
+s_x &lt;span style="color:#f92672">=&lt;/span> (pos &lt;span style="color:#f92672">//&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>) &lt;span style="color:#f92672">*&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>
+&lt;span style="color:#66d9ef">for&lt;/span> i &lt;span style="color:#f92672">in&lt;/span> range(s_x, s_x&lt;span style="color:#f92672">+&lt;/span>&lt;span style="color:#ae81ff">9&lt;/span>):
+&lt;span style="color:#66d9ef">if&lt;/span> i &lt;span style="color:#f92672">==&lt;/span> pos:
+&lt;span style="color:#66d9ef">continue&lt;/span>
+val &lt;span style="color:#f92672">=&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>_get_pos(i)
+&lt;span style="color:#66d9ef">if&lt;/span> val &lt;span style="color:#f92672">!=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#f92672">and&lt;/span> val &lt;span style="color:#f92672">in&lt;/span> ret:
+ret&lt;span style="color:#f92672">.&lt;/span>remove(val)
+s_y &lt;span style="color:#f92672">=&lt;/span> pos &lt;span style="color:#f92672">%&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>
+&lt;span style="color:#66d9ef">for&lt;/span> i &lt;span style="color:#f92672">in&lt;/span> range(s_y, &lt;span style="color:#ae81ff">81&lt;/span>, &lt;span style="color:#ae81ff">9&lt;/span>):
+&lt;span style="color:#66d9ef">if&lt;/span> i &lt;span style="color:#f92672">==&lt;/span> pos:
+&lt;span style="color:#66d9ef">continue&lt;/span>
+val &lt;span style="color:#f92672">=&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>_get_pos(i)
+&lt;span style="color:#66d9ef">if&lt;/span> val &lt;span style="color:#f92672">!=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#f92672">and&lt;/span> val &lt;span style="color:#f92672">in&lt;/span> ret:
+ret&lt;span style="color:#f92672">.&lt;/span>remove(val)
+box_y &lt;span style="color:#f92672">=&lt;/span> pos &lt;span style="color:#f92672">//&lt;/span> &lt;span style="color:#ae81ff">27&lt;/span>
+box_x &lt;span style="color:#f92672">=&lt;/span> (pos &lt;span style="color:#f92672">%&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>) &lt;span style="color:#f92672">//&lt;/span> &lt;span style="color:#ae81ff">3&lt;/span>
+box_start &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">27&lt;/span> &lt;span style="color:#f92672">*&lt;/span> box_y &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">3&lt;/span> &lt;span style="color:#f92672">*&lt;/span> box_x
+&lt;span style="color:#66d9ef">for&lt;/span> i &lt;span style="color:#f92672">in&lt;/span> range(box_start, box_start&lt;span style="color:#f92672">+&lt;/span>&lt;span style="color:#ae81ff">21&lt;/span>, &lt;span style="color:#ae81ff">9&lt;/span>):
+&lt;span style="color:#66d9ef">for&lt;/span> j &lt;span style="color:#f92672">in&lt;/span> range(i, i&lt;span style="color:#f92672">+&lt;/span>&lt;span style="color:#ae81ff">3&lt;/span>):
+&lt;span style="color:#66d9ef">if&lt;/span> j &lt;span style="color:#f92672">==&lt;/span> pos:
+&lt;span style="color:#66d9ef">continue&lt;/span>
+val &lt;span style="color:#f92672">=&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>_get_pos(j)
+&lt;span style="color:#66d9ef">if&lt;/span> val &lt;span style="color:#f92672">!=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span> &lt;span style="color:#f92672">and&lt;/span> val &lt;span style="color:#f92672">in&lt;/span> ret:
+ret&lt;span style="color:#f92672">.&lt;/span>remove(val)
+&lt;span style="color:#66d9ef">return&lt;/span> ret
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">_pos_to_xy&lt;/span>(self, pos):
+&lt;span style="color:#66d9ef">return&lt;/span> pos &lt;span style="color:#f92672">//&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>, pos &lt;span style="color:#f92672">%&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">_find_enter&lt;/span>(self):
+enter &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>
+available_list &lt;span style="color:#f92672">=&lt;/span> []
+&lt;span style="color:#66d9ef">for&lt;/span> i &lt;span style="color:#f92672">in&lt;/span> range(&lt;span style="color:#ae81ff">81&lt;/span>):
+val &lt;span style="color:#f92672">=&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>_get_pos(i)
+&lt;span style="color:#66d9ef">if&lt;/span> val &lt;span style="color:#f92672">!=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>:
+&lt;span style="color:#66d9ef">continue&lt;/span>
+tem_list &lt;span style="color:#f92672">=&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>_get_available(i)
+&lt;span style="color:#66d9ef">if&lt;/span> len(tem_list) &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>:
+&lt;span style="color:#66d9ef">raise&lt;/span> &lt;span style="color:#a6e22e">Exception&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;matrix error trace back&amp;#34;&lt;/span>)
+&lt;span style="color:#66d9ef">if&lt;/span> enter &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span> &lt;span style="color:#f92672">or&lt;/span> len(tem_list) &lt;span style="color:#f92672">&amp;lt;&lt;/span> len(available_list):
+enter &lt;span style="color:#f92672">=&lt;/span> i
+available_list &lt;span style="color:#f92672">=&lt;/span> tem_list
+&lt;span style="color:#66d9ef">return&lt;/span> enter, available_list
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">display&lt;/span>(self):
+&lt;span style="color:#66d9ef">for&lt;/span> line &lt;span style="color:#f92672">in&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>matrix:
+print(line)
+&lt;span style="color:#66d9ef">def&lt;/span> &lt;span style="color:#a6e22e">solver&lt;/span>(self):
+&lt;span style="color:#66d9ef">while&lt;/span> &lt;span style="color:#ae81ff">1&lt;/span>:
+&lt;span style="color:#66d9ef">try&lt;/span>:
+enter, available_list &lt;span style="color:#f92672">=&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>_find_enter()
+&lt;span style="color:#66d9ef">except&lt;/span> &lt;span style="color:#a6e22e">Exception&lt;/span>:
+self&lt;span style="color:#f92672">.&lt;/span>_pop_history()
+&lt;span style="color:#66d9ef">continue&lt;/span>
+&lt;span style="color:#66d9ef">if&lt;/span> enter &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>:
+&lt;span style="color:#66d9ef">return&lt;/span> self&lt;span style="color:#f92672">.&lt;/span>matrix
+self&lt;span style="color:#f92672">.&lt;/span>_set_pos(enter, available_list&lt;span style="color:#f92672">.&lt;/span>pop())
+self&lt;span style="color:#f92672">.&lt;/span>_push_history(enter, available_list)
+&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="测试">测试&lt;/h3>
+&lt;p>测试我用了所谓的&lt;a class="link" href="http://www.guokr.com/post/258813/focus/0735702793/" target="_blank" rel="noopener"
+>芬兰数学家因卡拉花费3个月设计出了世界上迄今难度最大的九宫格游戏&lt;/a>&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 89;
+flex-basis: 214px"
+>
+&lt;a href="http://example.org/2016/08/21/sudoku/testsudoku.jpg" data-size="400x447">
+&lt;img src="http://example.org/2016/08/21/sudoku/testsudoku.jpg"
+width="400"
+height="447"
+srcset="http://example.org/2016/08/21/sudoku/testsudoku_hub54616d9074391170f98af14f2d30a2d_26398_480x0_resize_q75_box.jpg 480w, http://example.org/2016/08/21/sudoku/testsudoku_hub54616d9074391170f98af14f2d30a2d_26398_1024x0_resize_q75_box.jpg 1024w"
+loading="lazy"
+>
+&lt;/a>
+&lt;/figure>&lt;/p>
+&lt;p>&lt;figure
+class="gallery-image"
+style="
+flex-grow: 261;
+flex-basis: 628px"
+>
+&lt;a href="http://example.org/2016/08/21/sudoku/E179DC8D-B8FD-4C76-A00C-F72A4645071A.jpeg" data-size="754x288">
+&lt;img src="http://example.org/2016/08/21/sudoku/E179DC8D-B8FD-4C76-A00C-F72A4645071A.jpeg"
+width="754"
+height="288"
+srcset="http://example.org/2016/08/21/sudoku/E179DC8D-B8FD-4C76-A00C-F72A4645071A_hu2a1927aa31c8cd3f96cce7e92e6162a3_52594_480x0_resize_q75_box.jpeg 480w, http://example.org/2016/08/21/sudoku/E179DC8D-B8FD-4C76-A00C-F72A4645071A_hu2a1927aa31c8cd3f96cce7e92e6162a3_52594_1024x0_resize_q75_box.jpeg 1024w"
+loading="lazy"
+>
+&lt;/a>
+&lt;/figure>&lt;/p>
+&lt;p>实际用时四秒左右，应该很有很大的优化空间&lt;/p></description></item><item><title>洗牌算法</title><link>http://example.org/2016/03/18/fisher-yates-shuffle.html</link><pubDate>Fri, 18 Mar 2016 00:00:00 +0000</pubDate><guid>http://example.org/2016/03/18/fisher-yates-shuffle.html</guid><description>&lt;p>洗牌算法是一个比较形象的术语，本质上是让一个数组内的元素随机排列。刚在&lt;a class="link" href="https://segmentfault.com/" target="_blank" rel="noopener"
+>segmentfault&lt;/a>看到这样一个问题&lt;a class="link" href="https://segmentfault.com/q/1010000004628428" target="_blank" rel="noopener"
+>10万个数字无序排列&lt;/a>，也就是洗牌了。&lt;/p>
+&lt;h3 id="实现">实现&lt;/h3>
+&lt;p>维基百科上的&lt;a class="link" href="https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle" target="_blank" rel="noopener"
+>Fisher–Yates shuffle&lt;/a>对洗牌做了比较详细的介绍，上面伪代码实现如下&lt;/p>
+&lt;pre>&lt;code>-- To shuffle an array a of n elements (indices 0..n-1):
+for i from n−1 downto 1 do
+j ← random integer such that 0 ≤ j ≤ i
+exchange a[j] and a[i]
+&lt;/code>&lt;/pre>&lt;!-- raw HTML omitted -->
+&lt;h3 id="原理">原理&lt;/h3>
+&lt;ul>
+&lt;li>
+&lt;p>该方法选中数组的最后一个元素：&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>接下来确定挑选随机元素的范围，从数组的第一个元素到上一步选中的元素都属于这一范围&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>确定范围后，从中随机挑选一个数&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>然后交换最后一个元素和随机选中的元素的值&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>上面的交换完成后，相当于我们完成了对数组最后一个元素的随机处理。接下来选中数组内倒数第二的元素&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>之所以从后往前处理，是因为这样便于确定随机选择的范围。&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>剩下的就是一些重复性的工作&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;h3 id="代码">代码&lt;/h3>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-python" data-lang="python">&lt;span style="color:#75715e">#!/usr/bin/env python&lt;/span>
+&lt;span style="color:#75715e"># -*- coding: utf-8 -*-&lt;/span>
+&lt;span style="color:#f92672">import&lt;/span> random
+N &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">100000&lt;/span>
+data &lt;span style="color:#f92672">=&lt;/span> range(N)
+&lt;span style="color:#66d9ef">for&lt;/span> i &lt;span style="color:#f92672">in&lt;/span> range(len(data)&lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>, &lt;span style="color:#ae81ff">0&lt;/span>, &lt;span style="color:#f92672">-&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>):
+t &lt;span style="color:#f92672">=&lt;/span> int(random&lt;span style="color:#f92672">.&lt;/span>random()&lt;span style="color:#f92672">*&lt;/span>i)
+data[t], data[i] &lt;span style="color:#f92672">=&lt;/span> data[i], data[t]
+print(data)
+&lt;/code>&lt;/pre>&lt;/div></description></item></channel></rss>

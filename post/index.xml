@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on 围城</title><link>http://example.org/post.html</link><description>Recent content in Posts on 围城</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Sat, 09 Oct 2021 00:00:00 +0000</lastBuildDate><atom:link href="http://example.org/post/index.xml" rel="self" type="application/rss+xml"/><item><title>QEMU 网络配置</title><link>http://example.org/2021/10/09/qemu-network-config.html</link><pubDate>Sat, 09 Oct 2021 00:00:00 +0000</pubDate><guid>http://example.org/2021/10/09/qemu-network-config.html</guid><description>QEMU 是一款开源的通用模拟器被用于各式各样的虚拟化场景。QEMU 不同于我们常用的 VirtualBox 或者 VMware 之类的软件，QEMU 并没有提供图形化的配置工具，一般都是</description></item><item><title>Intel Optane (傲腾) 工作原理</title><link>http://example.org/2021/01/27/how-intel-optane-work.html</link><pubDate>Wed, 27 Jan 2021 00:00:00 +0000</pubDate><guid>http://example.org/2021/01/27/how-intel-optane-work.html</guid><description>最近（2021年一月份）因特尔宣布停产消费级傲腾产品。在老玩家眼里傲腾一直是最强 SSD 的存在，傲腾的 4K 性能可以说是一骑绝尘，但是傲腾的价格在 SSD 中</description></item><item><title>Jetson Nano USB Boot 配置</title><link>http://example.org/2021/01/25/jetson-nano-usb-boot.html</link><pubDate>Mon, 25 Jan 2021 00:00:00 +0000</pubDate><guid>http://example.org/2021/01/25/jetson-nano-usb-boot.html</guid><description>Jetson Nano 是 NVIDIA 推出的 Aot 嵌入式平台，拥有 4 核心主频 1.43GHZ 的 Cortex-A57 CPU 和128组472GFLOPS （FP16）的Maxwell架构 GPU 以及 4GB LPDDR4 内存。 配置十分强大，</description></item><item><title>记一次 ImageMagick jpeg 缩放性能调优</title><link>http://example.org/2020/10/11/imagemagick-tuning.html</link><pubDate>Sun, 11 Oct 2020 00:00:00 +0000</pubDate><guid>http://example.org/2020/10/11/imagemagick-tuning.html</guid><description>由于同事了调岗，接手了一个简单的缩略图服务，大佬看之前的代码过于混(la)乱(ji)大手一挥带着我们用 C++ 重构了这个服务，故事就发生在新服务上</description></item><item><title>9102 年在国内如何快速的下载 Docker 镜像, 现存 Docker 镜像源横评</title><link>http://example.org/2019/07/12/how-to-pull-docker-image-fast-in-china.html</link><pubDate>Fri, 12 Jul 2019 00:00:00 +0000</pubDate><guid>http://example.org/2019/07/12/how-to-pull-docker-image-fast-in-china.html</guid><description>&lt;p>Docker 从 2013 发布一直广受瞩目，但是随着 k8s 等项目的发展，Docker Swarm 的失败，Docker 作为一个底层的容器运行时越来越边缘化，而且随着例如 &lt;a class="link" href="github.com/rkt/rkt" >rkt&lt;/a>, &lt;a class="link" href="https://github.com/alibaba/pouch" target="_blank" rel="noopener"
+>pouch&lt;/a> 等项目的出现，Docker 作为底层容器运行时的地位也在受到挑战。&lt;/p>
+&lt;p>但是就目前来说 Docker 仍然是开发者快速部署开发依赖的最好选择，而且但是即使 Docker 不在了，Docker Image 也将作为一个标准的容器镜像格式保留下来。但是 2018 年低 Docker 却悄悄关掉了 Docker CN 中国的镜像源，众所周知国内的网络非常复杂，访问国外网站极其缓慢。所以这里对目前现存的几个 Docker 镜像源进行横评，为大家选择镜像源提供参考。&lt;/p>
+&lt;h3 id="主要对以下五个镜像源进行测试">主要对以下五个镜像源进行测试&lt;/h3>
+&lt;p>&lt;a class="link" href="https://github.com/Azure/container-service-for-azure-china/blob/master/aks/README.md#22-container-registry-proxy" target="_blank" rel="noopener"
+>Azure 中国镜像 &lt;code>https://dockerhub.azk8s.cn&lt;/code>&lt;/a>&lt;/p>
+&lt;p>&lt;a class="link" href="https://cr.console.aliyun.com/cn-hangzhou/mirrors" target="_blank" rel="noopener"
+>阿里云加速器 (需要登录阿里云账户)&lt;/a>&lt;/p>
+&lt;p>&lt;a class="link" href="https://kirk-enterprise.github.io/hub-docs/#/user-guide/mirror" target="_blank" rel="noopener"
+>七牛云加速器 &lt;code>https://reg-mirror.qiniu.com&lt;/code>&lt;/a>&lt;/p>
+&lt;p>&lt;a class="link" href="https://mirrors.ustc.edu.cn/help/dockerhub.html" target="_blank" rel="noopener"
+>中科大镜像源&lt;/a>&lt;/p>
+&lt;p>&lt;a class="link" href="https://www.daocloud.io/mirror" target="_blank" rel="noopener"
+>DaoCloud 加速器&lt;/a>&lt;/p></description></item><item><title>Golang切片使用与内部实现(翻译)</title><link>http://example.org/2016/12/27/go-slices-usage-and-internals.html</link><pubDate>Tue, 27 Dec 2016 00:00:00 +0000</pubDate><guid>http://example.org/2016/12/27/go-slices-usage-and-internals.html</guid><description>&lt;p>Golang的切片类型提供了一种简单高效的操作序列化类型数据的方式。切片和其他语言中的数组类似，不过含有一些特殊的属性。这篇文章我们就来看一下什么是切片和如何使用切片&lt;/p></description></item><item><title>一种回溯的解数独算法</title><link>http://example.org/2016/08/21/sudoku.html</link><pubDate>Sun, 21 Aug 2016 00:00:00 +0000</pubDate><guid>http://example.org/2016/08/21/sudoku.html</guid><description>&lt;p>数独是一种逻辑性的数字填充游戏，玩家须以数字填进每一格，而每行、每列和每个宫（即3x3的大格）有齐1至9所有数字。游戏设计者会提供一部分的数字，使谜题只有一个答案。&lt;/p>
+&lt;p>&lt;figure
+>
+&lt;a href="http://example.org/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg" >
+&lt;img src="http://example.org/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg"
+loading="lazy"
+alt="一个经典的数独题">
+&lt;/a>
+&lt;figcaption>一个经典的数独题&lt;/figcaption>
+&lt;/figure>&lt;/p></description></item><item><title>洗牌算法</title><link>http://example.org/2016/03/18/fisher-yates-shuffle.html</link><pubDate>Fri, 18 Mar 2016 00:00:00 +0000</pubDate><guid>http://example.org/2016/03/18/fisher-yates-shuffle.html</guid><description>&lt;p>洗牌算法是一个比较形象的术语，本质上是让一个数组内的元素随机排列。刚在&lt;a class="link" href="https://segmentfault.com/" target="_blank" rel="noopener"
+>segmentfault&lt;/a>看到这样一个问题&lt;a class="link" href="https://segmentfault.com/q/1010000004628428" target="_blank" rel="noopener"
+>10万个数字无序排列&lt;/a>，也就是洗牌了。&lt;/p></description></item></channel></rss>
