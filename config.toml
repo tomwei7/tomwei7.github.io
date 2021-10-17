@@ -7,7 +7,7 @@ defaultContentLanguage = "zh-cn"
 hasCJKLanguage = true
 
 disqusShortname = "tomwei7"
-googleAnalytics = "GTM-P2QQVDC"
+googleAnalytics = "UA-72226462-1"
 uglyURLs = true
 
 [permalinks]
