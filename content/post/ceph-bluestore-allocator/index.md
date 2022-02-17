@@ -2,7 +2,7 @@
 title = "Ceph BlueStore 实现 - Allocator"
 date = "2022-02-17"
 categories = ["ceph","bluestore"]
-image = "ceph.webp"
+image = "ceph.png"
 +++
 
 ### 背景
