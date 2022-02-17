@@ -1,4 +1,4 @@
-baseURL = "http://example.org/"
+baseURL = "https://tomwei7.com"
 languageCode = "zh-cn"
 title = "围城"
 paginate = 5
