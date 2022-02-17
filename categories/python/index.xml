@@ -1,8 +1,8 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>python on 围城</title><link>http://example.org/categories/python.html</link><description>Recent content in python on 围城</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Sun, 21 Aug 2016 00:00:00 +0000</lastBuildDate><atom:link href="http://example.org/categories/python/index.xml" rel="self" type="application/rss+xml"/><item><title>一种回溯的解数独算法</title><link>http://example.org/2016/08/21/sudoku.html</link><pubDate>Sun, 21 Aug 2016 00:00:00 +0000</pubDate><guid>http://example.org/2016/08/21/sudoku.html</guid><description>&lt;p>数独是一种逻辑性的数字填充游戏，玩家须以数字填进每一格，而每行、每列和每个宫（即3x3的大格）有齐1至9所有数字。游戏设计者会提供一部分的数字，使谜题只有一个答案。&lt;/p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>python on 围城</title><link>https://tomwei7.com/categories/python.html</link><description>Recent content in python on 围城</description><generator>Hugo -- gohugo.io</generator><language>zh-cn</language><lastBuildDate>Sun, 21 Aug 2016 00:00:00 +0000</lastBuildDate><atom:link href="https://tomwei7.com/categories/python/index.xml" rel="self" type="application/rss+xml"/><item><title>一种回溯的解数独算法</title><link>https://tomwei7.com/2016/08/21/sudoku.html</link><pubDate>Sun, 21 Aug 2016 00:00:00 +0000</pubDate><guid>https://tomwei7.com/2016/08/21/sudoku.html</guid><description>&lt;p>数独是一种逻辑性的数字填充游戏，玩家须以数字填进每一格，而每行、每列和每个宫（即3x3的大格）有齐1至9所有数字。游戏设计者会提供一部分的数字，使谜题只有一个答案。&lt;/p>
 &lt;p>&lt;figure
 >
-&lt;a href="http://example.org/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg" >
-&lt;img src="http://example.org/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg"
+&lt;a href="https://tomwei7.com/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg" >
+&lt;img src="https://tomwei7.com/2016/08/21/sudoku/Sudoku-by-L2G-20050714.svg"
 loading="lazy"
 alt="一个经典的数独题">
 &lt;/a>
