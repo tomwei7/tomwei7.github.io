@@ -1,0 +1,10 @@
+{{- $image := .Page.Resources.GetMatch .Destination -}}
+{{- if $image -}}
+	{{- $notSVG := ne (path.Ext .Destination) ".svg" -}}
+	{{- if $notSVG -}}
+    {{- $image = $image.Resize (printf "%dx%d webp" $image.Width $image.Height) -}}
+	{{- end -}}
+{{- end -}}
+<p class="md__image">
+  <img src="{{ $image.RelPermalink | safeURL }}" alt="{{ .Text }}" {{ with .Title}} title="{{ . }}"{{ end }} />
+</p>

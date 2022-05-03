@@ -1,13 +1,18 @@
 baseURL = "https://tomwei7.com"
-languageCode = "zh-cn"
 title = "围城"
 paginate = 16
 theme = "m10c"
+languageCode = "zh-cn"
 defaultContentLanguage = "zh-cn"
 hasCJKLanguage = true
 disqusShortname = "tomwei7"
 googleAnalytics = "UA-72226462-1"
+copyright = "2021 Tomwei7 All rights reserved"
+rssLimit = 20
 
+[author]
+name = "weicheng"
+email = "tomwei7g@gmail.com"
 
 [menu]
 [[menu.main]]
@@ -30,7 +35,7 @@ weight = 2
 author = "围城"
 description = "程序员-代码-吐槽"
 menu_item_separator = " - "
-avatar = "/avatar.png"
+avatar = "/avatar.webp"
 
 [permalinks]
 post = "/:year/:month/:day/:filename"
