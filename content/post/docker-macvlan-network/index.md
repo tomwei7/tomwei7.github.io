@@ -4,7 +4,7 @@ date: 2022-05-03T16:16:19+08:00
 tags: ["docker", "network", "macvlan"]
 ---
 
->> 💡 网上有很多关于 k8s 偏平化网络建设的文章，大多针对于大规律的集群。但是现在也有很多人在 NAS 或者家庭服务器中也会使用 Docker 部署服务，本文主要介绍如何使用 Docker  构建扁平化的网络，提供容器的跨主机互访能力。
+> 💡 网上有很多关于 k8s 偏平化网络建设的文章，大多针对于大规律的集群。但是现在也有很多人在 NAS 或者家庭服务器中也会使用 Docker 部署服务，本文主要介绍如何使用 Docker  构建扁平化的网络，提供容器的跨主机互访能力。
 
 随着 2013 年 Docker 的发布，容器技术开始走进了各大互联网公司。容器技术不仅仅服务于互联网公司的线上业务，同时也为开发人员搭建测试环境、三方依赖服务等提供了极大的便利。除了在企业中的应用，容器凭借着无依赖一键启动的优势也被越来越多的人用于在家庭 NAS 或者家庭服务器中部署服务，基本上属于必备软件。
 
@@ -14,7 +14,7 @@ tags: ["docker", "network", "macvlan"]
 
 可以简单将 docker0 理解为一个 switch，container 通过 veth-pair 连接到这个 switch，host 通过 docker0 这个 interface 连接这这个 switch，container 发出的数据包经过 host 进行 NAT 后从主机的 eth0 端口流出。
 
->> 💡 如果这里将 eth0 直接加到这个 bridge 中来实现也可以使用偏平化的网络，但是 Docker 没有提供这这样的功能，借用 cni 中的 bridge 插件实现 [https://www.cni.dev/plugins/current/main/bridge/](https://www.cni.dev/plugins/current/main/bridge/)
+> 💡 如果这里将 eth0 直接加到这个 bridge 中来实现也可以使用偏平化的网络，但是 Docker 没有提供这这样的功能，借用 cni 中的 bridge 插件实现 [https://www.cni.dev/plugins/current/main/bridge/](https://www.cni.dev/plugins/current/main/bridge/)
 
 
 使用 Bridge 网络时由于经过了一层 NAT 转发，容器有自己的私有网段。在其他主机上访问容器服务只能通过端口转发的方式访问。那么有没有办法让容器在我们的局域网中用于“一席之地”（独立IP）呢？实际可行的方式有很多，这里主要介绍一下最简单的 macvlan 模式
@@ -193,7 +193,7 @@ ip -details link show
 
 ![openwrt-vlan-02.png](openwrt-vlan-02.png)
 
->> 💡 如果主机不是直接连接到路由器还存在交换机等还需要进行对应等 vlan 设置这里不做赘述
+> 💡 如果主机不是直接连接到路由器还存在交换机等还需要进行对应等 vlan 设置这里不做赘述
 
 ### 其他
 

@@ -17,6 +17,10 @@ h1, h2, h3, h4, h5, h6 {
   color: $lightest-color;
 }
 
+p {
+  word-break: normal;
+}
+
 a {
   color: $primary-color;
   transition: color 0.35s;
@@ -62,6 +66,17 @@ table {
     border: 1px inset $lightest-color;
     border-collapse: collapse;
     text-align: center;
+  }
+}
+
+blockquote {
+  border-left: 4px solid $darkest-color;
+  margin: 0;
+  padding: 0 15px;
+
+  cite::before {
+    content: '-';
+    padding: 0 5px;
   }
 }
 
